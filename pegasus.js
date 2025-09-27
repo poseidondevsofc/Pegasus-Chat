@@ -1,105 +1,93 @@
 (async () => {
-  async function getToken() {
-    let token = sessionStorage.getItem("pegasus_gemini_token_v2");
-    while (!token) {
-      token = prompt("⚠️ Informe sua Google Gemini API Key:");
-      if (!token) alert("❌ A chave é obrigatória!");
-    }
-    sessionStorage.setItem("pegasus_gemini_token_v2", token);
-    return token;
+  const activityId = window.location.pathname.split("/").pop(); 
+  console.log("📌 Atividade ID:", activityId);
+
+  // 🔑 Pega a chave Gemini
+  let geminiKey = sessionStorage.getItem("pegasus_gemini_key");
+  while (!geminiKey) {
+    geminiKey = prompt("⚠️ Informe sua API Key do Gemini:");
+    if (!geminiKey) alert("❌ A chave é obrigatória!");
   }
+  sessionStorage.setItem("pegasus_gemini_key", geminiKey);
 
-  const API_KEY = await getToken();
+  // 🔍 Possíveis padrões de URL do JSON
+  const urls = [
+    `/task_${activityId}.json`,
+    `/atividade/${activityId}/task.json`,
+    `/api/task_${activityId}.json`,
+    `/api/task/${activityId}`
+  ];
 
-  // 🔍 Função para extrair questões do DOM e HTML bruto
-  function getQuestions() {
-    let questions = [];
-
-    // Busca ampla no DOM
-    document.querySelectorAll("div, section, article, table, li").forEach((q) => {
-      const text = q.innerText?.trim() || "";
-
-      // Encontra enunciados prováveis
-      if (/quest(ão|ao)|pergunta|atividade|exercício/i.test(text)) {
-        let alternativas = [];
-
-        // Busca por alternativas em labels, listas, botões e spans
-        q.querySelectorAll("label, li, td, button, span").forEach(el => {
-          const t = el.innerText.trim();
-          if (t.length > 0 && t.length < 120) alternativas.push(t);
-        });
-
-        // Busca em selects
-        q.querySelectorAll("select").forEach(sel => {
-          [...sel.options].forEach(opt => {
-            if (opt.innerText.trim()) alternativas.push(opt.innerText.trim());
-          });
-        });
-
-        if (text && alternativas.length) {
-          questions.push({ enunciado: text, alternativas, el: q });
-        }
+  let data = null;
+  for (let url of urls) {
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) {
+        data = await resp.json();
+        console.log("✅ JSON encontrado:", url, data);
+        break;
       }
-    });
-
-    // Se não achar nada no DOM, pega HTML bruto
-    if (!questions.length) {
-      const html = document.body.innerHTML.slice(0, 8000); // corta pra não pesar
-      questions.push({ enunciado: "Conteúdo bruto da página", alternativas: [], html });
+    } catch (e) {
+      console.warn("❌ Falha em", url);
     }
-
-    return questions;
   }
 
-  const questions = getQuestions();
-  if (!questions.length) {
-    alert("❌ Nenhuma questão encontrada.");
+  if (!data) {
+    alert("❌ Nenhum JSON de atividade encontrado.");
     return;
   }
 
-  for (let q of questions) {
-    const prompt = q.html
-      ? `Analise o seguinte HTML e responda somente com a alternativa correta:\n\n${q.html}`
-      : `Pergunta: ${q.enunciado}\nOpções: ${q.alternativas.join(", ")}\nResponda apenas com a alternativa correta.`;
+  // 🔎 Função auxiliar: manda questão pro Gemini
+  async function askGemini(question, options) {
+    const prompt = `Pergunta: ${question}\nOpções: ${options.join(", ")}\nResponda apenas com a alternativa correta.`;
 
-    try {
-      const resp = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + API_KEY,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
-          })
-        }
-      );
+    const resp = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + geminiKey,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        })
+      }
+    );
 
-      const data = await resp.json();
-      const resposta = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      console.log("🔎 Pergunta:", q.enunciado.slice(0, 100));
-      console.log("🤖 Gemini respondeu:", resposta);
-
-      // Marca automaticamente
-      q.el?.querySelectorAll("label, li, td, button, span").forEach(el => {
-        if (resposta.includes(el.innerText.trim())) {
-          el.style.background = "yellow"; // destaca visualmente
-          const input = el.querySelector("input");
-          if (input) input.checked = true;
-        }
-      });
-
-      q.el?.querySelectorAll("select").forEach(sel => {
-        [...sel.options].forEach(opt => {
-          if (resposta.includes(opt.innerText.trim())) {
-            sel.value = opt.value;
-          }
-        });
-      });
-
-    } catch (e) {
-      console.error("❌ Erro ao consultar Gemini:", e);
-    }
+    const result = await resp.json();
+    return result.candidates?.[0]?.content?.parts?.[0]?.text || "";
   }
 
-  alert("✅ Respostas processadas automaticamente!");
+  // 📌 Itera pelas questões do JSON
+  if (Array.isArray(data.questions || data.quests)) {
+    const questions = data.questions || data.quests;
+
+    for (let q of questions) {
+      const enunciado = q.pergunta || q.enunciado || "";
+      const alternativas = q.alternativas || q.options || [];
+      let resposta = q.resposta_correta || q.answer || "";
+
+      if (!resposta && alternativas.length) {
+        console.log("🤖 Perguntando ao Gemini...");
+        resposta = await askGemini(enunciado, alternativas);
+      }
+
+      console.log("🔎 Pergunta:", enunciado);
+      console.log("✅ Resposta:", resposta);
+
+      // Marca automaticamente no DOM
+      document.querySelectorAll("label, option").forEach(el => {
+        if (resposta.includes(el.innerText.trim())) {
+          if (el.tagName === "LABEL") {
+            const input = el.querySelector("input");
+            if (input) input.checked = true;
+          } else if (el.tagName === "OPTION") {
+            el.selected = true;
+          }
+        }
+      });
+    }
+
+    alert("✅ Respostas aplicadas automaticamente!");
+  } else {
+    alert("⚠️ O JSON não contém lista de questões.");
+  }
 })();
