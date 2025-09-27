@@ -1,16 +1,16 @@
-(async function(){
-  // 🔑 Sempre pede o token HuggingFace
+javascript:(async function(){
+  // 🔑 Sempre pede o token Gemini
   async function getToken() {
     let token = null;
-    while (!token || !token.startsWith("hf_")) {
-      token = prompt("⚠️ Informe seu HuggingFace Token (começa com hf_):");
-      if (!token) alert("❌ O token é obrigatório para usar o Pegasus!");
+    while (!token) {
+      token = prompt("⚠️ Informe sua Google Gemini API Key:");
+      if (!token) alert("❌ A chave é obrigatória!");
     }
-    sessionStorage.setItem("pegasus_hf_token_v1", token);
+    sessionStorage.setItem("pegasus_gemini_token_v1", token);
     return token;
   }
 
-  const hfToken = await getToken();
+  const geminiToken = await getToken();
 
   // 🎨 Criar menu Pegasus
   function createOverlay() {
@@ -35,11 +35,11 @@
       <h2 style="margin:0 0 10px 0; font-size:20px; color:#0f0;">Pegasus 🪶</h2>
       <p style="font-size:13px; color:#ccc;">Token válido ✔️</p>
       <textarea id="pegasus-question" 
-        placeholder="Cole a questão ou tarefa aqui..." 
+        placeholder="Digite sua pergunta para o Gemini..." 
         style="width:100%; height:100px; border-radius:8px; border:none; padding:8px; margin-top:5px; font-size:13px;"></textarea>
       <button id="sendToIA" style="margin-top:10px; padding:8px 12px; background:#0f0; color:#000; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">Enviar para IA</button>
       <button id="closePegasus" style="margin-top:10px; margin-left:10px; padding:8px 12px; background:#900; color:#fff; border:none; border-radius:8px; cursor:pointer;">Fechar</button>
-      <pre id="pegasus-response" style="margin-top:10px; background:#111; padding:8px; border-radius:8px; font-size:13px; max-height:200px; overflow:auto;"></pre>
+      <pre id="pegasus-response" style="margin-top:10px; background:#111; padding:8px; border-radius:8px; font-size:13px; max-height:200px; overflow:auto; white-space:pre-wrap;"></pre>
     `;
 
     document.body.appendChild(overlay);
@@ -56,17 +56,19 @@
       }
 
       const output = document.getElementById("pegasus-response");
-      output.textContent = "⏳ Consultando IA...";
+      output.textContent = "⏳ Consultando Gemini...";
 
       try {
-        const resp = await fetch("https://api-inference.huggingface.co/models/facebook/bart-large-mnli", {
+        const resp = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
           method: "POST",
           headers: {
-            "Authorization": "Bearer " + hfToken,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "x-goog-api-key": geminiToken
           },
           body: JSON.stringify({
-            inputs: question
+            contents: [{
+              parts: [{ text: question }]
+            }]
           })
         });
 
@@ -75,9 +77,10 @@
         }
 
         const data = await resp.json();
-        output.textContent = JSON.stringify(data, null, 2);
+        const resposta = data?.candidates?.[0]?.content?.parts?.[0]?.text || "❌ Nenhuma resposta gerada.";
+        output.textContent = resposta;
       } catch (e) {
-        output.textContent = "❌ Erro ao consultar IA: " + e.message;
+        output.textContent = "❌ Erro ao consultar Gemini: " + e.message;
       }
     };
   }
