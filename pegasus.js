@@ -1,5 +1,5 @@
 (async function(){
-  // 🔑 Pergunta obrigatória pelo token HuggingFace
+  // 🔑 Sempre pede o token HuggingFace
   async function getToken() {
     let token = null;
     while (!token || !token.startsWith("hf_")) {
