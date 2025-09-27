@@ -1,27 +1,46 @@
-javascript:(async function(){
-  async function getToken() {
-    let token = sessionStorage.getItem("pegasus_gemini_token_v1");
-    while (!token) {
-      token = prompt("⚠️ Informe sua Google Gemini API Key:");
-      if (!token) alert("❌ A chave é obrigatória!");
+(async () => {
+  async function getKey() {
+    let key = sessionStorage.getItem("pegasus_gemini_key");
+    while (!key) {
+      key = prompt("⚠️ Informe sua Gemini API Key:");
+      if (!key) alert("❌ A chave é obrigatória!");
     }
-    sessionStorage.setItem("pegasus_gemini_token_v1", token);
-    return token;
+    sessionStorage.setItem("pegasus_gemini_key", key);
+    return key;
+  }
+  const API_KEY = await getKey();
+
+  function log(msg) {
+    const box = document.getElementById("pegasus-log");
+    if (box) {
+      const line = document.createElement("div");
+      line.textContent = msg;
+      line.style.marginBottom = "4px";
+      box.appendChild(line);
+      box.scrollTop = box.scrollHeight;
+    }
   }
 
-  const geminiToken = await getToken();
-
-  function extractPageText() {
-    // Remove menus e scripts
-    const clone = document.body.cloneNode(true);
-    const toRemove = clone.querySelectorAll("script, style, nav, header, footer");
-    toRemove.forEach(el => el.remove());
-
-    // Pega apenas texto visível
-    return clone.innerText
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 4000); // limite de caracteres pro Gemini
+  function getQuestions() {
+    let questions = [];
+    document.querySelectorAll(".card, .questao, .pergunta").forEach((q) => {
+      const enunciado = q.querySelector("p, .enunciado")?.innerText || "";
+      let alternativas = [];
+      q.querySelectorAll("label").forEach(label => {
+        const text = label.innerText.trim();
+        if (text) alternativas.push(text);
+      });
+      q.querySelectorAll("select").forEach(sel => {
+        let opts = [...sel.querySelectorAll("option")]
+          .map(o => o.innerText.trim())
+          .filter(o => o);
+        if (opts.length) alternativas.push(...opts);
+      });
+      if (enunciado && alternativas.length) {
+        questions.push({ enunciado, alternativas, el: q });
+      }
+    });
+    return questions;
   }
 
   function createOverlay() {
@@ -30,7 +49,7 @@ javascript:(async function(){
     const overlay = document.createElement("div");
     overlay.id = "pegasus-overlay";
     overlay.style.position = "fixed";
-    overlay.style.bottom = "80px";
+    overlay.style.top = "20px";
     overlay.style.right = "20px";
     overlay.style.width = "360px";
     overlay.style.padding = "15px";
@@ -40,80 +59,68 @@ javascript:(async function(){
     overlay.style.borderRadius = "14px";
     overlay.style.fontFamily = "Arial,sans-serif";
     overlay.style.zIndex = "999999";
+    overlay.style.maxHeight = "70vh";
+    overlay.style.overflowY = "auto";
 
     overlay.innerHTML = `
-      <h2 style="margin:0 0 10px; color:#0f0;">Pegasus 🪶</h2>
-      <p style="font-size:13px; color:#ccc;">Extraia perguntas automaticamente da página</p>
-      <div style="margin-top:10px; display:flex; justify-content:space-between;">
-        <button id="scanPage" style="flex:1; padding:8px; background:#0f0; color:#000; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">Ler Página</button>
-        <button id="closePegasus" style="margin-left:10px; padding:8px 12px; background:#900; color:#fff; border:none; border-radius:8px; cursor:pointer;">Fechar</button>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img src="https://raw.githubusercontent.com/poseidondevsofc/Pegasus-Tarefas-/main/pegasus-estava-coberto-de-chamas-azuis-inteligencia-artificial_886951-363.jpg" width="32" height="32" style="border-radius:4px;">
+        <h2 style="margin:0;font-size:20px;color:#0f0;">Pegasus 🪶</h2>
       </div>
-      <div id="pegasus-chat" style="margin-top:12px; background:#111; padding:10px; border-radius:8px; font-size:13px; max-height:250px; overflow:auto;"></div>
+      <p style="font-size:13px; color:#ccc;">IA ativada, processando questões...</p>
+      <div id="pegasus-log" style="margin-top:10px; font-size:13px; background:#111; padding:8px; border-radius:8px;"></div>
     `;
 
     document.body.appendChild(overlay);
-
-    // Botão flutuante
-    const floatBtn = document.createElement("button");
-    floatBtn.id = "pegasus-float";
-    floatBtn.textContent = "🪶 Pegasus";
-    floatBtn.style.position = "fixed";
-    floatBtn.style.bottom = "20px";
-    floatBtn.style.right = "20px";
-    floatBtn.style.padding = "10px 14px";
-    floatBtn.style.background = "#0f0";
-    floatBtn.style.color = "#000";
-    floatBtn.style.border = "none";
-    floatBtn.style.borderRadius = "50px";
-    floatBtn.style.cursor = "pointer";
-    floatBtn.style.zIndex = "999999";
-    floatBtn.onclick = () => {
-      overlay.style.display = overlay.style.display === "none" ? "block" : "none";
-    };
-    document.body.appendChild(floatBtn);
-
-    // Fechar
-    document.getElementById("closePegasus").onclick = () => overlay.style.display = "none";
-
-    // Ler página e mandar pro Gemini
-    document.getElementById("scanPage").onclick = async () => {
-      const chatBox = document.getElementById("pegasus-chat");
-      const pageText = extractPageText();
-
-      const botMsg = document.createElement("div");
-      botMsg.style.background = "#333";
-      botMsg.style.color = "#fff";
-      botMsg.style.padding = "6px 10px";
-      botMsg.style.borderRadius = "8px";
-      botMsg.style.margin = "6px 0";
-      botMsg.textContent = "⏳ Enviando tarefa para o Gemini...";
-      chatBox.appendChild(botMsg);
-      chatBox.scrollTop = chatBox.scrollHeight;
-
-      try {
-        const resp = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": geminiToken
-          },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `Analise o seguinte conteúdo de uma tarefa e devolva apenas as respostas corretas, destacando as alternativas certas:\n\n${pageText}`
-              }]
-            }]
-          })
-        });
-
-        const data = await resp.json();
-        const resposta = data?.candidates?.[0]?.content?.parts?.[0]?.text || "❌ Nenhuma resposta encontrada.";
-        botMsg.textContent = resposta;
-      } catch (e) {
-        botMsg.textContent = "❌ Erro: " + e.message;
-      }
-    };
   }
 
   createOverlay();
+
+  const questions = getQuestions();
+  if (!questions.length) {
+    log("❌ Nenhuma questão encontrada.");
+    return;
+  }
+
+  for (let q of questions) {
+    log("🔎 Pergunta: " + q.enunciado);
+    const prompt = `Pergunta: ${q.enunciado}\nOpções: ${q.alternativas.join(", ")}\nResponda apenas com a alternativa correta.`;
+
+    try {
+      const resp = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + API_KEY,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+          })
+        }
+      );
+
+      const data = await resp.json();
+      const resposta = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      log("🤖 Gemini: " + resposta);
+
+      q.querySelectorAll("label").forEach(label => {
+        if (resposta.includes(label.innerText.trim())) {
+          const input = label.querySelector("input");
+          if (input) input.checked = true;
+        }
+      });
+
+      q.querySelectorAll("select").forEach(sel => {
+        [...sel.options].forEach(opt => {
+          if (resposta.includes(opt.innerText.trim())) {
+            sel.value = opt.value;
+          }
+        });
+      });
+
+    } catch (e) {
+      log("❌ Erro: " + e.message);
+    }
+  }
+
+  log("✅ Respostas aplicadas automaticamente!");
 })();
