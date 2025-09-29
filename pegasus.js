@@ -1,7 +1,7 @@
 javascript:(async function(){
-    // --- ESTADO GLOBAL E CONFIGURAÇÃO ---
-    let conversationHistory = []; // Armazena o histórico da conversa
-    const GEMINI_MODEL = "gemini-2.5-flash"; // Modelo poderoso e multimodal
+    let conversationHistory = []; 
+    const GEMINI_MODEL = "gemini-2.5-flash"; 
+    let mode = "direct"; // direct = só resposta / full = explicação completa
     
     async function getToken() {
         let token = sessionStorage.getItem("pegasus_gemini_token_v1");
@@ -17,50 +17,31 @@ javascript:(async function(){
 
     function extractPageText() {
         const clone = document.body.cloneNode(true);
-        // Remove scripts, estilos e elementos estruturais para extrair texto limpo
         const toRemove = clone.querySelectorAll("script, style, nav, header, footer, #pegasus-overlay, #pegasus-float");
         toRemove.forEach(el => el.remove());
-        // Limita o texto para evitar exceder o limite de token de contexto
         return clone.innerText.replace(/\s+/g, " ").trim().slice(0, 4000);
-    }
-    
-    function formatMarkdown(text) {
-        // Substitui **negrito** por <b>negrito</b>
-        text = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-        // Substitui *itálico* por <i>itálico</i> (Cuidado com listas, mas geralmente resolve)
-        text = text.replace(/\*(.*?)\*/g, '<i>$1</i>');
-        // Substitui newlines por <br> para formatação no HTML
-        text = text.replace(/\n/g, '<br>');
-        
-        // Adiciona um texto inicial mais amigável
-        if (!text.startsWith("✅")) {
-             text = "🤖 Olá! " + text;
-        }
-        return text;
     }
 
     function appendMessage(role, text) {
         const chatBox = document.getElementById("pegasus-chat");
         const msg = document.createElement("div");
-        
-        // Estilização diferenciada para usuário e modelo
-        if (role === 'user') {
-            msg.style.textAlign = 'right';
-            msg.style.background = '#004d40'; // Verde escuro para usuário
-            msg.style.color = '#fff';
-            msg.textContent = text;
-        } else { // role === 'model'
-            msg.style.textAlign = 'left';
-            msg.style.background = '#222'; // Cinza escuro para modelo
-            msg.style.color = '#0f0';
-            msg.innerHTML = formatMarkdown(text);
-        }
-        
         msg.style.padding = '8px 12px';
         msg.style.borderRadius = '8px';
         msg.style.margin = '6px 0';
         msg.style.maxWidth = '85%';
         msg.style.display = 'inline-block';
+
+        if (role === 'user') {
+            msg.style.textAlign = 'right';
+            msg.style.background = '#004d40';
+            msg.style.color = '#fff';
+            msg.textContent = text;
+        } else {
+            msg.style.textAlign = 'left';
+            msg.style.background = '#222';
+            msg.style.color = '#0f0';
+            msg.textContent = text;
+        }
         
         const wrapper = document.createElement('div');
         wrapper.style.display = 'flex';
@@ -75,9 +56,9 @@ javascript:(async function(){
         const sendBtn = document.getElementById("sendButton");
         const inputField = document.getElementById("userInput");
 
-        // Adicionar mensagem de carregamento
         const loadingMsg = document.createElement("div");
-        loadingMsg.innerHTML = `<span style="color:#0f0;">⏳ Gemini está digitando...</span>`;
+        loadingMsg.textContent = "⏳ Gemini está digitando...";
+        loadingMsg.style.color = "#0f0";
         loadingMsg.style.margin = '6px 0';
         chatBox.appendChild(loadingMsg);
         chatBox.scrollTop = chatBox.scrollHeight;
@@ -85,11 +66,14 @@ javascript:(async function(){
         sendBtn.disabled = true;
         inputField.disabled = true;
 
-        // Adiciona a mensagem atual ao histórico ANTES de enviar
-        conversationHistory.push({
-            role: "user",
-            parts: messageParts
-        });
+        conversationHistory.push({ role: "user", parts: messageParts });
+
+        let systemPrompt = "";
+        if (mode === "direct") {
+            systemPrompt = "Responda somente com a resposta correta, sem explicações, sem formatação.";
+        } else {
+            systemPrompt = "Responda com a resposta correta e também explicações detalhadas e exemplos.";
+        }
 
         try {
             const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
@@ -99,32 +83,24 @@ javascript:(async function(){
                     "x-goog-api-key": geminiToken
                 },
                 body: JSON.stringify({
-                    // Envia todo o histórico para manter o contexto
-                    contents: conversationHistory 
+                    contents: [
+                        { role: "user", parts: [{ text: systemPrompt }] },
+                        ...conversationHistory
+                    ]
                 })
             });
 
             const data = await resp.json();
-            
-            // Tratamento de erro da API (Ex: Chave inválida ou conteúdo bloqueado)
-            if (data.error) {
-                 throw new Error(`API Error: ${data.error.message}`);
-            }
+            if (data.error) throw new Error(`API Error: ${data.error.message}`);
 
-            const modelResponseText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "❌ Não foi possível gerar uma resposta válida. Tente um prompt diferente.";
-            
-            // Remove a mensagem de carregamento
+            let modelResponseText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "❌ Sem resposta.";
             loadingMsg.remove(); 
-            
-            // Exibe e salva a resposta do modelo
-            appendMessage('model', modelResponseText);
-            conversationHistory.push({
-                role: "model",
-                parts: [{ text: modelResponseText }]
-            });
+            appendMessage('model', modelResponseText.trim());
+            conversationHistory.push({ role: "model", parts: [{ text: modelResponseText.trim() }] });
 
         } catch (e) {
-            loadingMsg.innerHTML = `<span style="color:#f00;">❌ Erro: ${e.message}</span>`;
+            loadingMsg.textContent = `❌ Erro: ${e.message}`;
+            loadingMsg.style.color = "#f00";
         } finally {
             sendBtn.disabled = false;
             inputField.disabled = false;
@@ -133,29 +109,17 @@ javascript:(async function(){
         }
     }
     
-    // --- FUNÇÕES DE EVENTOS ---
-    
     function handleSendMessage() {
         const inputField = document.getElementById("userInput");
         const userMessage = inputField.value.trim();
-
-        if (userMessage) {
-            // A interface do usuário já mostra a mensagem através da função 'appendMessage' dentro do callGeminiAPI
-            // Mas precisamos enviar a mensagem como um array de partes
-            callGeminiAPI([{ text: userMessage }]);
-        }
+        if (userMessage) callGeminiAPI([{ text: userMessage }]);
     }
 
     function handleScanPage() {
         const pageContent = extractPageText();
-        const initialPrompt = `Analise o conteúdo desta página e identifique perguntas ou listas de tarefas. Use este contexto para futuras perguntas. Responda com um breve "Contexto da página carregado com sucesso! No que posso ajudar com base neste conteúdo?"\n\n[CONTEXTO DA PÁGINA]:\n${pageContent}`;
-        
-        // Simula a mensagem inicial do usuário (embora seja um prompt de contexto)
         appendMessage('user', 'Carregando contexto da página...');
-        
-        // Define o primeiro turno da conversa
         conversationHistory = [];
-        callGeminiAPI([{ text: initialPrompt }]);
+        callGeminiAPI([{ text: "Use este conteúdo como contexto:\n" + pageContent }]);
     }
     
     function createOverlay() {
@@ -166,8 +130,7 @@ javascript:(async function(){
         overlay.style.position = "fixed";
         overlay.style.bottom = "100px";
         overlay.style.right = "40px";
-        overlay.style.width = "400px"; /* Ligeiramente maior */
-        overlay.style.padding = "0";
+        overlay.style.width = "420px"; 
         overlay.style.background = "rgba(25,25,25,0.98)";
         overlay.style.color = "#fff";
         overlay.style.border = "2px solid #0f0";
@@ -175,36 +138,31 @@ javascript:(async function(){
         overlay.style.fontFamily = "Inter, Arial, sans-serif";
         overlay.style.zIndex = "999999";
         overlay.style.boxShadow = "0 4px 20px rgba(0,0,0,0.8)";
-        overlay.style.display = "none"; // Começa fechado
+        overlay.style.display = "none";
         
-        // Logo
-        const logoUrl = "https://raw.githubusercontent.com/poseidondevsofc/Pegasus-Tarefas-/678cf42e44d3c306bcc0172b28b2f4d6cdfbe8a5/pegasus-estava-coberto-de-chamas-azuis-inteligencia-artificial_886951-363.jpg";
-
         overlay.innerHTML = `
             <div id="drag-handle" style="padding:12px; border-bottom:1px solid #0f0; display:flex; align-items:center; justify-content:space-between; cursor:move;">
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <img src="${logoUrl}" style="width:30px; height:30px; object-fit:cover; border-radius:6px;" />
-                    <h2 style="margin:0; font-size:16px; color:#0f0;">Pegasus Tarefas (Gemini)</h2>
-                </div>
+                <h2 style="margin:0; font-size:16px; color:#0f0;">Pegasus Chat (Gemini)</h2>
                 <span id="closePegasus" style="cursor:pointer; font-size:18px; color:#f00;">&times;</span>
             </div>
             
-            <div id="pegasus-chat" style="padding:10px; background:#111; font-size:14px; max-height:300px; overflow-y:auto; overflow-x:hidden;">
-                <div style="padding:10px; text-align:center; color:#aaa;">Bem-vindo ao Pegasus Chat. Clique em "Ler Contexto" para começar.</div>
-            </div>
+            <div id="pegasus-chat" style="padding:10px; background:#111; font-size:14px; max-height:300px; overflow-y:auto;"></div>
 
             <div style="padding:10px; border-top:1px solid #333;">
-                <button id="scanPage" style="width:100%; padding:8px; margin-bottom: 10px; background:#00d4ff; color:#000; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">1. Ler Contexto da Página</button>
-                <div style="display:flex; gap:5px;">
+                <button id="scanPage" style="width:100%; padding:8px; margin-bottom:10px; background:#00d4ff; color:#000; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">1. Ler Contexto da Página</button>
+                <div style="display:flex; gap:5px; margin-bottom:5px;">
                     <input type="text" id="userInput" placeholder="2. Pergunte ou envie uma tarefa..." style="flex:1; padding:10px; border-radius:8px; border:1px solid #0f0; background:#000; color:#fff;" />
                     <button id="sendButton" style="padding:10px 15px; background:#0f0; color:#000; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">Enviar</button>
+                </div>
+                <div style="display:flex; gap:5px;">
+                    <button id="directMode" style="flex:1; padding:8px; background:#ff9800; color:#000; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">Resposta Direta</button>
+                    <button id="fullMode" style="flex:1; padding:8px; background:#4caf50; color:#000; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">Explicação Completa</button>
                 </div>
             </div>
         `;
 
         document.body.appendChild(overlay);
-        
-        // Botão flutuante (Toggle)
+
         const floatBtn = document.createElement("button");
         floatBtn.id = "pegasus-float";
         floatBtn.textContent = "📒 Pegasus Chat";
@@ -224,28 +182,26 @@ javascript:(async function(){
         };
         document.body.appendChild(floatBtn);
 
-        // --- Adicionar Listeners ---
         document.getElementById("closePegasus").onclick = () => overlay.style.display = "none";
         document.getElementById("scanPage").onclick = handleScanPage;
         document.getElementById("sendButton").onclick = handleSendMessage;
-        
-        // Permite enviar mensagem pressionando Enter
+
+        // troca de modos
+        document.getElementById("directMode").onclick = () => { mode = "direct"; appendMessage("model", "✅ Modo ajustado: Resposta Direta"); };
+        document.getElementById("fullMode").onclick = () => { mode = "full"; appendMessage("model", "✅ Modo ajustado: Explicação Completa"); };
+
         document.getElementById("userInput").addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                handleSendMessage();
-            }
+            if (e.key === 'Enter') handleSendMessage();
         });
-        
-        // --- Funcionalidade de Arrastar (Drag) ---
+
+        // arrastar janela
         let isDragging = false, offsetX = 0, offsetY = 0;
         const dragHandle = document.getElementById("drag-handle");
-        
         dragHandle.addEventListener("mousedown", e => {
             isDragging = true;
             offsetX = e.clientX - overlay.getBoundingClientRect().left;
             offsetY = e.clientY - overlay.getBoundingClientRect().top;
         });
-        
         document.addEventListener("mousemove", e => {
             if (isDragging) {
                 overlay.style.left = (e.clientX - offsetX) + "px";
