@@ -214,7 +214,7 @@ document.getElementById('pegasus-clone').onclick = async ()=>{
   // confirm ethics
   const ok = confirm("Aviso: só gere esses scripts se você tem permissão para acessar/baixar esse site. Não use para contornar autenticação. Continuar?");
   if(!ok) return;
-  addUserMsg('[Gerar Script Clonar] ' + target);
+  addUserMsg('[Clonar Site] ' + target);
   addBotText('⏳ Gerando scripts de clonagem (wget, httrack, puppeteer)...');
   try{
     // prompt to generate puppeteer/wget content
