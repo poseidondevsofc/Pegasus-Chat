@@ -217,11 +217,51 @@ document.getElementById('pegasus-clone').onclick = async ()=>{
   addUserMsg('[Clonar Site] ' + target);
   addBotText('⏳ Gerando scripts de clonagem (wget, httrack, puppeteer)...');
   try{
+    const url = new URL(target);
+    const domain = url.hostname; // Extrai o domínio da URL para usar nos comandos
+
     // prompt to generate puppeteer/wget content
     const prompt = `Gere três saídas para clonar/baixar o site ${target}:
-1) Um comando wget para baixar o site inteiro para uso offline (com explicação mínima, apenas a linha de comando).
-2) Um comando httrack equivalente.
-3) Um script Puppeteer (Node.js) que abre a URL, aguarda carregamento completo (networkidle2), salva o HTML renderizado em 'page.html' e faz screenshot 'screenshot.png'. Forneça somente os blocos de código e os comandos, sem explicações longas.`;
+1) Um comando wget para baixar o site inteiro para uso offline, incluindo CSS, JS e imagens, com links convertidos para uso local. Apenas a linha de comando.
+\`\`\`bash
+wget \\
+  --recursive \\
+  --no-clobber \\
+  --page-requisites \\
+  --html-extension \\
+  --convert-links \\
+  --restrict-file-names=windows \\
+  --domains ${domain} \\
+  --no-parent \\
+  ${target}
+\`\`\`
+2) Um comando httrack equivalente para baixar o site inteiro.
+\`\`\`bash
+httrack ${target} -O "./cloned_site_${domain}" "+*.${domain}/*" -V %n%p -%v -c8
+\`\`\`
+3) Um script Puppeteer (Node.js) que abre a URL, aguarda carregamento completo (networkidle2), salva o HTML renderizado em 'page.html' e faz screenshot 'screenshot.png'. Forneça somente o bloco de código.
+\`\`\`javascript
+const puppeteer = require('puppeteer');
+const fs = require('fs');
+
+(async () => {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  console.log('Navegando para ${target}...');
+  await page.goto('${target}', { waitUntil: 'networkidle2', timeout: 60000 });
+
+  const htmlContent = await page.content();
+  fs.writeFileSync('page.html', htmlContent);
+  console.log('HTML renderizado salvo em page.html');
+
+  await page.screenshot({ path: 'screenshot.png', fullPage: true });
+  console.log('Screenshot salvo em screenshot.png');
+
+  await browser.close();
+  console.log('Navegador fechado.');
+})();
+\`\`\`
+`;
     const text = await callTextAPI(prompt);
     chatBox.lastChild.remove();
     renderMixedResponse(text, true);
@@ -229,7 +269,9 @@ document.getElementById('pegasus-clone').onclick = async ()=>{
     // additionally, extract code fences to provide downloads
     const codeBlocks = extractCodeBlocks(text);
     codeBlocks.forEach((cb, idx)=>{
-      const fn = cb.lang && cb.lang.includes('js') ? `puppeteer_clone.js` : (cb.lang==='bash' ? `clone_command_${idx+1}.sh` : `file_${idx+1}.txt`);
+      let fn = `file_${idx+1}.txt`;
+      if(cb.lang && cb.lang.includes('js')) fn = `puppeteer_clone.js`;
+      else if(cb.lang === 'bash') fn = `clone_command_${idx+1}.sh`;
       addCodeBlock(cb.code, fn);
     });
     addBotText('Scripts prontos — copie ou baixe. Rode o script Puppeteer localmente (Node.js).');
