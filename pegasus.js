@@ -1,85 +1,82 @@
 (async function(){
 /* Pegasus Tarefas — Versão multimodal completa com Extração Total
-
-Texto, imagens, código, gerar projeto, gerar scripts de clonagem
-
-Botão extra: extrai tudo de uma página e envia ao Gemini
-
-Use apenas em sites públicos ou com permissão
+   - Texto, imagens, código, gerar projeto, gerar scripts de clonagem
+   - Botão extra: extrai tudo de uma página e envia ao Gemini
+   - Use apenas em sites públicos ou com permissão
 */
-
 
 const GEMINI_TEXT_MODEL = "gemini-2.5-flash";
 const GEMINI_IMAGE_MODEL = "gemini-1.5-pro";
 let GEMINI_API_KEY = sessionStorage.getItem("pegasus_gemini_token_v1") || "";
 
 if(!GEMINI_API_KEY){
-GEMINI_API_KEY = prompt("Pegasus Tarefas — Cole sua Google Gemini API Key (será salva em sessionStorage):");
-if(!GEMINI_API_KEY){
-alert("API Key necessária.");
-return;
-}
-sessionStorage.setItem("pegasus_gemini_token_v1", GEMINI_API_KEY);
+  GEMINI_API_KEY = prompt("Pegasus Tarefas — Cole sua Google Gemini API Key (será salva em sessionStorage):");
+  if(!GEMINI_API_KEY){
+    alert("API Key necessária.");
+    return;
+  }
+  sessionStorage.setItem("pegasus_gemini_token_v1", GEMINI_API_KEY);
 }
 
 // --- helpers ---
 function el(html){ const div = document.createElement('div'); div.innerHTML = html; return div.firstElementChild;}
 function blobDownload(filename, content, mime='text/plain'){ const b = new Blob([content], {type: mime}); const url = URL.createObjectURL(b); const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
 function createCodeBlock(code, lang='') {
-const pre = document.createElement('pre');
-const codeEl = document.createElement('code');
-codeEl.textContent = code;
-pre.appendChild(codeEl);
-const wrap = document.createElement('div');
-wrap.style.position = 'relative'; wrap.style.margin='8px 0';
-const copyBtn = document.createElement('button');
-copyBtn.textContent = 'Copiar';
-copyBtn.style.position='absolute'; copyBtn.style.right='6px'; copyBtn.style.top='6px'; copyBtn.style.padding='4px 8px';
-copyBtn.onclick = ()=>{ navigator.clipboard.writeText(code).then(()=>{ copyBtn.textContent='Copiado!'; setTimeout(()=>copyBtn.textContent='Copiar',1200); }); };
-wrap.appendChild(copyBtn); wrap.appendChild(pre);
-return wrap;
+  const pre = document.createElement('pre');
+  const codeEl = document.createElement('code');
+  codeEl.textContent = code;
+  pre.appendChild(codeEl);
+  const wrap = document.createElement('div');
+  wrap.style.position = 'relative'; wrap.style.margin='8px 0';
+  const copyBtn = document.createElement('button');
+  copyBtn.textContent = 'Copiar';
+  copyBtn.style.position='absolute'; copyBtn.style.right='6px'; copyBtn.style.top='6px'; copyBtn.style.padding='4px 8px';
+  copyBtn.onclick = ()=>{ navigator.clipboard.writeText(code).then(()=>{ copyBtn.textContent='Copiado!'; setTimeout(()=>copyBtn.textContent='Copiar',1200); }); };
+  wrap.appendChild(copyBtn); wrap.appendChild(pre);
+  return wrap;
 }
-function escapeHtml(s){ return (s||'').toString().replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/\n/g,'<br>'); }
+function escapeHtml(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
 
 // --- UI overlay ---
 if(document.getElementById('pegasus-tarefas-overlay')) {
-document.getElementById('pegasus-tarefas-overlay').remove();
-document.getElementById('pegasus-tarefas-float')?.remove();
+  document.getElementById('pegasus-tarefas-overlay').remove();
+  document.getElementById('pegasus-tarefas-float')?.remove();
 }
 const overlay = document.createElement('div');
 overlay.id = 'pegasus-tarefas-overlay';
 overlay.style.cssText = [
-'position:fixed','right:30px','bottom:90px','width:540px','max-height:75vh',
-'background:rgba(12,12,12,0.98)','color:#e6ffe6','border:2px solid #0f0',
-'border-radius:12px','z-index:9999999','box-shadow:0 8px 40px rgba(0,0,0,0.8)',
-'display:flex','flex-direction:column','overflow:hidden','font-family:Inter, Arial, sans-serif'
+  'position:fixed','right:30px','bottom:90px','width:540px','max-height:75vh',
+  'background:rgba(12,12,12,0.98)','color:#e6ffe6','border:2px solid #0f0',
+  'border-radius:12px','z-index:9999999','box-shadow:0 8px 40px rgba(0,0,0,0.8)',
+  'display:flex','flex-direction:column','overflow:hidden','font-family:Inter, Arial, sans-serif'
 ].join(';');
 
 overlay.innerHTML = `
+  <div id="pegasus-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid rgba(0,255,0,0.08);">
+    <div style="display:flex;gap:10px;align-items:center;">
+      <img src="https://raw.githubusercontent.com/poseidondevsofc/Pegasus-Tarefas-/678cf42e44d3c306bcc0172b28b2f4d6cdfbe8a5/pegasus-estava-coberto-de-chamas-azuis-inteligencia-artificial_886951-363.jpg" style="width:34px;height:34px;border-radius:6px;object-fit:cover" />
+      <div style="font-weight:700;color:#b6ffb6">Pegasus Tarefas</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button id="pegasus-hide" style="background:#111;color:#f77;border:1px solid rgba(255,0,0,0.15);padding:6px 8px;border-radius:6px;cursor:pointer">Fechar</button>
+    </div>
+  </div>
+  <div id="pegasus-chat" style="padding:10px; overflow:auto; flex:1; font-size:13px; background:linear-gradient(180deg,#071 0%,transparent 100%);"></div>
+  <div style="padding:10px;border-top:1px solid rgba(255,255,255,0.03);display:flex;flex-direction:column;gap:8px;background:linear-gradient(180deg,rgba(0,0,0,0.3),transparent 100%)">
+    <input id="pegasus-prompt" placeholder="Digite comando, pedir site, projeto, gerar imagem..." style="padding:10px;border-radius:8px;border:1px solid rgba(0,255,0,0.12);background:#000;color:#fff;font-size:13px" />
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="pegasus-send" style="flex:1;padding:10px;border-radius:8px;background:#0f0;color:#000;font-weight:700;cursor:pointer">Enviar (Completo)</button>
+      <button id="pegasus-img" style="padding:10px;border-radius:8px;background:#00d4ff;color:#000;font-weight:700;cursor:pointer">Gerar Imagem</button>
+      <button id="pegasus-proj" style="padding:10px;border-radius:8px;background:#ffb86b;color:#000;font-weight:700;cursor:pointer">Gerar Projeto</button>
+      <button id="pegasus-clone" style="padding:10px;border-radius:8px;background:#ff6b6b;color:#000;font-weight:700;cursor:pointer">Gerar Script Clonar</button>
+      <button id="pegasus-extract" style="padding:10px;border-radius:8px;background:#9b59b6;color:#fff;font-weight:700;cursor:pointer">Extrair e Enviar Tudo</button>
+    </div>
+    <div style="font-size:11px;color:#acffac">Modo: Completo — Gemini pode gerar texto, código e imagens. Use com responsabilidade.</div>
+  </div>
+`;
+document.body.appendChild(overlay);
 
-  <div id="pegasus-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid rgba(0,255,0,0.08);">  
-    <div style="display:flex;gap:10px;align-items:center;">  
-      <img src="https://raw.githubusercontent.com/poseidondevsofc/Pegasus-Tarefas-/678cf42e44d3c306bcc0172b28b2f4d6cdfbe8a5/pegasus-estava-coberto-de-chamas-azuis-inteligencia-artificial_886951-363.jpg" style="width:34px;height:34px;border-radius:6px;object-fit:cover" />  
-      <div style="font-weight:700;color:#b6ffb6">Pegasus Tarefas</div>  
-    </div>  
-    <div style="display:flex;gap:8px;align-items:center;">  
-      <button id="pegasus-hide" style="background:#111;color:#f77;border:1px solid rgba(255,0,0,0.15);padding:6px 8px;border-radius:6px;cursor:pointer">Fechar</button>  
-    </div>  
-  </div>  
-  <div id="pegasus-chat" style="padding:10px; overflow:auto; flex:1; font-size:13px; background:linear-gradient(180deg,#071 0%,transparent 100%);"></div>  
-  <div style="padding:10px;border-top:1px solid rgba(255,255,255,0.03);display:flex;flex-direction:column;gap:8px;background:linear-gradient(180deg,rgba(0,0,0,0.3),transparent 100%)">  
-    <input id="pegasus-prompt" placeholder="Digite comando, pedir site, projeto, gerar imagem..." style="padding:10px;border-radius:8px;border:1px solid rgba(0,255,0,0.12);background:#000;color:#fff;font-size:13px" />  
-    <div style="display:flex;gap:8px;flex-wrap:wrap">  
-      <button id="pegasus-send" style="flex:1;padding:10px;border-radius:8px;background:#0f0;color:#000;font-weight:700;cursor:pointer">Enviar (Completo)</button>  
-      <button id="pegasus-img" style="padding:10px;border-radius:8px;background:#00d4ff;color:#000;font-weight:700;cursor:pointer">Gerar Imagem</button>  
-      <button id="pegasus-proj" style="padding:10px;border-radius:8px;background:#ffb86b;color:#000;font-weight:700;cursor:pointer">Gerar Projeto</button>  
-      <button id="pegasus-clone" style="padding:10px;border-radius:8px;background:#ff6b6b;color:#000;font-weight:700;cursor:pointer">Gerar Script Clonar</button>  
-      <button id="pegasus-extract" style="padding:10px;border-radius:8px;background:#9b59b6;color:#fff;font-weight:700;cursor:pointer">Extrair e Enviar Tudo</button>  
-    </div>  
-    <div style="font-size:11px;color:#acffac">Modo: Completo — Gemini pode gerar texto, código e imagens. Use com responsabilidade.</div>  
-  </div>  
-`;  
-document.body.appendChild(overlay);  // floating toggle button
+// floating toggle button
 const floatBtn = document.createElement('button');
 floatBtn.id = 'pegasus-tarefas-float';
 floatBtn.textContent = '📒 Pegasus Tarefas';
@@ -92,138 +89,134 @@ document.getElementById('pegasus-hide').onclick = ()=> overlay.style.display='no
 
 // chat helpers
 const chatBox = document.getElementById('pegasus-chat');
-function addUserMsg(text){ const d=document.createElement('div'); d.style.textAlign='right'; d.style.margin='8px 0'; d.innerHTML=<div style="display:inline-block;background:#003d24;color:#fff;padding:8px 10px;border-radius:8px;max-width:86%">${escapeHtml(text)}</div>; chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;}
-function addBotText(text){ const d=document.createElement('div'); d.style.textAlign='left'; d.style.margin='8px 0'; d.innerHTML=<div style="display:inline-block;background:#061206;color:#b8ffb8;padding:8px 10px;border-radius:8px;max-width:86%">${escapeHtml(text)}</div>; chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;}
+function addUserMsg(text){ const d=document.createElement('div'); d.style.textAlign='right'; d.style.margin='8px 0'; d.innerHTML=`<div style="display:inline-block;background:#003d24;color:#fff;padding:8px 10px;border-radius:8px;max-width:86%">${escapeHtml(text)}</div>`; chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;}
+function addBotText(text){ const d=document.createElement('div'); d.style.textAlign='left'; d.style.margin='8px 0'; d.innerHTML=`<div style="display:inline-block;background:#061206;color:#b8ffb8;padding:8px 10px;border-radius:8px;max-width:86%">${escapeHtml(text)}</div>`; chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;}
 function addBotHtml(html){ const d=document.createElement('div'); d.style.textAlign='left'; d.style.margin='8px 0'; const box=document.createElement('div'); box.style.background='#061206'; box.style.color='#b8ffb8'; box.style.padding='8px 10px'; box.style.borderRadius='8px'; box.style.maxWidth='92%'; box.innerHTML=html; d.appendChild(box); chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;}
 function addCodeBlock(code, filename){ const wrapper=createCodeBlock(code); const dlBtn=document.createElement('button'); dlBtn.textContent='Baixar'; dlBtn.style.marginLeft='8px'; dlBtn.onclick=()=>blobDownload(filename||'code.txt',code,'text/plain'); const container=document.createElement('div'); container.style.margin='8px 0'; container.appendChild(wrapper); container.appendChild(dlBtn); chatBox.appendChild(container); chatBox.scrollTop=chatBox.scrollHeight; }
 
 // --- Gemini API calls ---
 async function callTextAPI(promptText){
-const system = Você é Pegasus Tarefas — responda no modo COMPLETO multimodal, podendo gerar texto, código ou instruções de forma prática.;
-const body = { contents: [{ role:"user", parts:[{ text:system }] }, { role:"user", parts:[{ text:promptText }] }] };
-const res = await fetch(https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent, {
-method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY}, body:JSON.stringify(body)
-});
-const j = await res.json();
-if(j.error) throw new Error(j.error.message||JSON.stringify(j.error));
-return j?.candidates?.[0]?.content?.parts?.[0]?.text||'';
+  const system = `Você é Pegasus Tarefas — responda no modo COMPLETO multimodal, podendo gerar texto, código ou instruções de forma prática.`;
+  const body = { contents: [{ role:"user", parts:[{ text:system }] }, { role:"user", parts:[{ text:promptText }] }] };
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`, {
+    method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY}, body:JSON.stringify(body)
+  });
+  const j = await res.json();
+  if(j.error) throw new Error(j.error.message||JSON.stringify(j.error));
+  return j?.candidates?.[0]?.content?.parts?.[0]?.text||'';
 }
 
 async function callImageAPI(promptText, size='1024x1024'){
-const resp = await fetch(https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateImage,{
-method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY},
-body:JSON.stringify({prompt:{text:promptText}})
-});
-const j = await resp.json();
-if(j.error) throw new Error(j.error.message||JSON.stringify(j.error));
-const base64 = j?.image?.b64 || j?.images?.[0]?.b64 || j?.candidates?.[0]?.content?.image?.b64 || j?.artifacts?.[0]?.base64;
-const url = j?.image?.uri || j?.images?.[0]?.uri || j?.candidates?.[0]?.content?.image?.uri;
-return { base64, url, raw:j };
+  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateImage`,{
+    method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY},
+    body:JSON.stringify({prompt:{text:promptText}})
+  });
+  const j = await resp.json();
+  if(j.error) throw new Error(j.error.message||JSON.stringify(j.error));
+  const base64 = j?.image?.b64 || j?.images?.[0]?.b64 || j?.candidates?.[0]?.content?.image?.b64 || j?.artifacts?.[0]?.base64;
+  const url = j?.image?.uri || j?.images?.[0]?.uri || j?.candidates?.[0]?.content?.image?.uri;
+  return { base64, url, raw:j };
 }
 
 // --- Parse and render code/text ---
 function extractCodeBlocks(text){
-const re=/(\w*)\n([\s\S]*?)/g, blocks=[]; let m;
-while((m=re.exec(text))!==null) blocks.push({lang:m[1]||'', code:m[2].trim()});
-return blocks;
+  const re=/```(\w*)\n([\s\S]*?)```/g, blocks=[]; let m;
+  while((m=re.exec(text))!==null) blocks.push({lang:m[1]||'', code:m[2].trim()});
+  return blocks;
 }
 function renderMixedResponse(text){
-const blocks = extractCodeBlocks(text);
-if(blocks.length===0){ addBotText(text.trim()); return; }
-const fenceRe=/(\w*)\n([\s\S]*?)/g;
-let lastIndex=0, m, parts=[];
-while((m=fenceRe.exec(text))!==null){
-const preText=text.slice(lastIndex,m.index).trim();
-if(preText) parts.push({type:'text', content:preText});
-parts.push({type:'code', lang:m[1]||'', content:m[2].trim()});
-lastIndex=fenceRe.lastIndex;
-}
-const tail=text.slice(lastIndex).trim(); if(tail) parts.push({type:'text', content:tail});
-parts.forEach(p=>{
-if(p.type==='text') addBotText(p.content);
-else { const filename=p.lang==='html'?'index.html':p.lang==='css'?'style.css':p.lang.includes('js')?'script.js':'file.txt'; addCodeBlock(p.content,filename); }
-});
+  const blocks = extractCodeBlocks(text);
+  if(blocks.length===0){ addBotText(text.trim()); return; }
+  const fenceRe=/```(\w*)\n([\s\S]*?)```/g;
+  let lastIndex=0, m, parts=[];
+  while((m=fenceRe.exec(text))!==null){
+    const preText=text.slice(lastIndex,m.index).trim();
+    if(preText) parts.push({type:'text', content:preText});
+    parts.push({type:'code', lang:m[1]||'', content:m[2].trim()});
+    lastIndex=fenceRe.lastIndex;
+  }
+  const tail=text.slice(lastIndex).trim(); if(tail) parts.push({type:'text', content:tail});
+  parts.forEach(p=>{
+    if(p.type==='text') addBotText(p.content);
+    else { const filename=p.lang==='html'?'index.html':p.lang==='css'?'style.css':p.lang.includes('js')?'script.js':'file.txt'; addCodeBlock(p.content,filename); }
+  });
 }
 
 // --- Button handlers ---
 // Enviar
 document.getElementById('pegasus-send').onclick = async ()=>{
-const prompt=document.getElementById('pegasus-prompt').value.trim(); if(!prompt){ alert('Digite algo.'); return; }
-addUserMsg(prompt); addBotText('⏳ Processando...');
-try{ const text=await callTextAPI(prompt); chatBox.lastChild.remove(); renderMixedResponse(text); }
-catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); console.error(e); }
-document.getElementById('pegasus-prompt').value='';
+  const prompt=document.getElementById('pegasus-prompt').value.trim(); if(!prompt){ alert('Digite algo.'); return; }
+  addUserMsg(prompt); addBotText('⏳ Processando...');
+  try{ const text=await callTextAPI(prompt); chatBox.lastChild.remove(); renderMixedResponse(text); }
+  catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); console.error(e); }
+  document.getElementById('pegasus-prompt').value='';
 };
 // Gerar imagem
 document.getElementById('pegasus-img').onclick=async()=>{
-const prompt=document.getElementById('pegasus-prompt').value.trim(); if(!prompt){ alert('Digite descrição da imagem.'); return; }
-addUserMsg('[Imagem] '+prompt); addBotText('⏳ Gerando imagem...');
-try{
-const r=await callImageAPI(prompt); chatBox.lastChild.remove();
-const img=document.createElement('img'); img.style.maxWidth='100%'; img.style.borderRadius='8px'; img.style.margin='6px 0';
-if(r.base64) img.src='data:image/png;base64,'+r.base64; else if(r.url) img.src=r.url; else addBotText('Imagem gerada — resposta curta: '+JSON.stringify(r.raw).slice(0,200)+'...');
-chatBox.appendChild(img); chatBox.scrollTop=chatBox.scrollHeight;
-}catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); console.error(e); }
-document.getElementById('pegasus-prompt').value='';
+  const prompt=document.getElementById('pegasus-prompt').value.trim(); if(!prompt){ alert('Digite descrição da imagem.'); return; }
+  addUserMsg('[Imagem] '+prompt); addBotText('⏳ Gerando imagem...');
+  try{
+    const r=await callImageAPI(prompt); chatBox.lastChild.remove();
+    const img=document.createElement('img'); img.style.maxWidth='100%'; img.style.borderRadius='8px'; img.style.margin='6px 0';
+    if(r.base64) img.src='data:image/png;base64,'+r.base64; else if(r.url) img.src=r.url; else addBotText('Imagem gerada — resposta curta: '+JSON.stringify(r.raw).slice(0,200)+'...');
+    chatBox.appendChild(img); chatBox.scrollTop=chatBox.scrollHeight;
+  }catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); console.error(e); }
+  document.getElementById('pegasus-prompt').value='';
 };
 // Gerar projeto
 document.getElementById('pegasus-proj').onclick=async()=>{
-const prompt=document.getElementById('pegasus-prompt').value.trim()||'Crie um site simples com index.html, style.css, script.js.';
-addUserMsg('[Gerar Projeto] '+prompt); addBotText('⏳ Gerando projeto...');
-try{
-const text=await callTextAPI(Por favor gere arquivos separados em blocos \``html`, ```css` e ```js` conforme pedido: ${prompt});   chatBox.lastChild.remove(); renderMixedResponse(text); addBotText('Arquivos acima — use “Copiar” ou “Baixar”.');   }catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); }   document.getElementById('pegasus-prompt').value='';   };   // Gerar script clonar   document.getElementById('pegasus-clone').onclick=async()=>{   const target=prompt("URL do site público para clonar:"); if(!target) return;   if(!confirm("⚠️ Só use com permissão. Continuar?")) return;   addUserMsg('[Clonar Site] '+target); addBotText('⏳ Gerando scripts de clonagem...');   try{   const url=new URL(target), domain=url.hostname;   const prompt=Gere comandos wget, httrack e script Puppeteer (Node.js) para clonar ${target}, forneça apenas blocos de código.`;
-const text=await callTextAPI(prompt); chatBox.lastChild.remove(); renderMixedResponse(text);
-}catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); }
+  const prompt=document.getElementById('pegasus-prompt').value.trim()||'Crie um site simples com index.html, style.css, script.js.';
+  addUserMsg('[Gerar Projeto] '+prompt); addBotText('⏳ Gerando projeto...');
+  try{
+    const text=await callTextAPI(`Por favor gere arquivos separados em blocos \`\`\`html\`, \`\`\`css\` e \`\`\`js\` conforme pedido: ${prompt}`);
+    chatBox.lastChild.remove(); renderMixedResponse(text); addBotText('Arquivos acima — use “Copiar” ou “Baixar”.');
+  }catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); }
+  document.getElementById('pegasus-prompt').value='';
+};
+// Gerar script clonar
+document.getElementById('pegasus-clone').onclick=async()=>{
+  const target=prompt("URL do site público para clonar:"); if(!target) return;
+  if(!confirm("⚠️ Só use com permissão. Continuar?")) return;
+  addUserMsg('[Clonar Site] '+target); addBotText('⏳ Gerando scripts de clonagem...');
+  try{
+    const url=new URL(target), domain=url.hostname;
+    const prompt=`Gere comandos wget, httrack e script Puppeteer (Node.js) para clonar ${target}, forneça apenas blocos de código.`;
+    const text=await callTextAPI(prompt); chatBox.lastChild.remove(); renderMixedResponse(text);
+  }catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); }
 };
 
 // --- NOVO: Extrair e Enviar Tudo ---
 document.getElementById('pegasus-extract').onclick=async()=>{
-if(!confirm("⚠️ Aviso ético: só use com permissão em páginas públicas. Continuar?")) return;
-addUserMsg('[Extrair e Enviar Tudo]');
-addBotText('⏳ Extraindo conteúdo da página...');
-try{
-// texto visível
-let textContent=document.body.innerText||'';
-// imagens same-origin
-let imgs = Array.from(document.images).filter(img=>img.src.startsWith(location.origin)).map(img=>img.src);
-let links = Array.from(document.querySelectorAll('a')).map(a=>a.href).filter(h=>h.startsWith('http'));
-let promptText=Extrair e analisar o máximo de informação desta página:\nTexto:\n${textContent}\nImagens:\n${imgs.join('\n')}\nLinks:\n${links.join('\n')}\nGere sugestões de código, resumos, imagens ou qualquer saída multimodal que achar útil.;
-const text=await callTextAPI(promptText);
-chatBox.lastChild.remove();
-renderMixedResponse(text);
-}catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); console.error(e); }
+  if(!confirm("⚠️ Aviso ético: só use com permissão em páginas públicas. Continuar?")) return;
+  addUserMsg('[Extrair e Enviar Tudo]');
+  addBotText('⏳ Extraindo conteúdo da página...');
+  try{
+    // texto visível
+    let textContent=document.body.innerText||'';
+    // imagens same-origin
+    let imgs = Array.from(document.images).filter(img=>img.src.startsWith(location.origin)).map(img=>img.src);
+    let links = Array.from(document.querySelectorAll('a')).map(a=>a.href).filter(h=>h.startsWith('http'));
+    let promptText=`Extrair e analisar o máximo de informação desta página:\nTexto:\n${textContent}\nImagens:\n${imgs.join('\n')}\nLinks:\n${links.join('\n')}\nGere sugestões de código, resumos, imagens ou qualquer saída multimodal que achar útil.`;
+    const text=await callTextAPI(promptText);
+    chatBox.lastChild.remove();
+    renderMixedResponse(text);
+  }catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); console.error(e); }
 };
 
 // Enter para enviar
 document.getElementById('pegasus-prompt').addEventListener('keydown', function(e){
-if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); document.getElementById('pegasus-send').click(); }
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); document.getElementById('pegasus-send').click(); }
 });
 
 // --- drag support ---
 (function(){
-const header=document.getElementById('pegasus-header'); let dragging=false, ox=0, oy=0;
-header.addEventListener('mousedown',(ev)=>{ dragging=true; ox=ev.clientX; oy=ev.clientY; document.body.style.userSelect='none'; });
-window.addEventListener('mousemove',(ev)=>{ if(!dragging) return; const dx=ev.clientX-ox, dy=ev.clientY-oy; const rect=overlay.getBoundingClientRect(); overlay.style.right='auto'; overlay.style.bottom='auto'; overlay.style.left=(rect.left+dx)+'px'; overlay.style.top=(rect.top+dy)+'px'; ox=ev.clientX; oy=ev.clientY; });
-window.addEventListener('mouseup',()=>{ dragging=false; document.body.style.userSelect='auto'; });
+  const header=document.getElementById('pegasus-header'); let dragging=false, ox=0, oy=0;
+  header.addEventListener('mousedown',(ev)=>{ dragging=true; ox=ev.clientX; oy=ev.clientY; document.body.style.userSelect='none'; });
+  window.addEventListener('mousemove',(ev)=>{ if(!dragging) return; const dx=ev.clientX-ox, dy=ev.clientY-oy; const rect=overlay.getBoundingClientRect(); overlay.style.right='auto'; overlay.style.bottom='auto'; overlay.style.left=(rect.left+dx)+'px'; overlay.style.top=(rect.top+dy)+'px'; ox=ev.clientX; oy=ev.clientY; });
+  window.addEventListener('mouseup',()=>{ dragging=false; document.body.style.userSelect='auto'; });
 })();
 
 // notas finais
 addBotText('✅ Pegasus Tarefas pronto. Use os botões para texto, imagem, projeto, clonar ou extrair tudo.');
 addBotText('⚠️ Use apenas conteúdo público ou com permissão.');
 })();
-
-Coloque a nova API de geracao de imagem: curl -X POST \
-"https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict" \
--H "x-goog-api-key: $GEMINI_API_KEY" \
--H "Content-Type: application/json" \
--d '{
-"instances": [
-{
-"prompt": "Robot holding a red skateboard"
-}
-],
-"parameters": {
-"sampleCount": 4
-}
-}'  que se não gerar irá usar a API de busca de imagem:  https://cse.google.com/cse?cx=f7614b24d5b1c4b31
-
