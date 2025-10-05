@@ -1,9 +1,9 @@
 javascript:(async function(){
-/* Pegasus Chat — Versão 2.4 (Correção Final de Modelo: gemini-2.5-flash e Imagem com IMAGEN) */
+/* Pegasus Chat — Versão 2.6 (QNA: Auto Execução Imediata do Script) */
 
 // --- Configurações ---
-const APP_VERSION = "1.0"; // Versão reduzida
-const CURRENT_TIME = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}); // Hora atual (6:52 PM -03, 05/10/2025)
+const APP_VERSION = "2.6"; // Versão reduzida
+const CURRENT_TIME = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}); // Hora atual
 const GEMINI_TEXT_MODEL = "gemini-2.5-flash"; // Modelo texto estável
 const IMAGEN_MODEL = "imagen-4.0-generate-001"; // Modelo dedicado à geração de imagens
 const IMAGEN_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${IMAGEN_MODEL}:predict`;
@@ -25,7 +25,7 @@ function createCodeBlock(code,lang=''){const pre=document.createElement('pre');c
 function escapeHtml(s){return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}
 function addBotTextRaw(text){const d=document.createElement('div');d.style.textAlign='left';d.style.margin='8px 0';d.innerHTML=`<div style="display:inline-block;background:#293729;color:#e6ffe6;padding:10px 12px;border-radius:12px;max-width:86%;white-space:pre-wrap;word-break:break-all; box-shadow:0 2px 4px rgba(0,0,0,0.2)">${text}</div>`;chatBox.appendChild(d);chatBox.scrollTop=chatBox.scrollHeight}
 
-// --- UI overlay (Novo Estilo) ---
+// --- UI overlay ---
 if(document.getElementById('pegasus-tarefas-overlay')) {
   document.getElementById('pegasus-tarefas-overlay').remove();
   document.getElementById('pegasus-tarefas-float')?.remove();
@@ -112,10 +112,8 @@ async function callTextAPI(promptText){
   return j?.candidates?.[0]?.content?.parts?.[0]?.text||'';
 }
 
-// *** Função de imagem corrigida para a API IMAGEN ***
+// Função de imagem usa a API IMAGEN
 async function callImageAPI(promptText){
-  // Note: Imagen só aceita prompts em Inglês. Para melhorar, o prompt do usuário 
-  // pode precisar ser traduzido antes de ser enviado. Por enquanto, enviamos direto.
   const body = {
     instances: [
       {
@@ -123,8 +121,7 @@ async function callImageAPI(promptText){
       }
     ],
     parameters: {
-      sampleCount: 1 // Gera 1 imagem
-      // Outros parâmetros podem ser adicionados aqui: aspectRatio: "16:9", imageSize: "1K"
+      sampleCount: 1 
     }
   };
   
@@ -140,7 +137,6 @@ async function callImageAPI(promptText){
   const j = await res.json();
   if(j.error) throw new Error(j.error.message||JSON.stringify(j.error));
   
-  // A resposta do Imagen retorna Base64 em generatedImages[0].image.imageBytes
   const generatedImage = j?.generatedImages?.[0];
 
   if (generatedImage && generatedImage.image && generatedImage.image.imageBytes) {
@@ -152,9 +148,8 @@ async function callImageAPI(promptText){
       };
   }
 
-  throw new Error("A API Imagen não retornou dados de imagem válidos. O prompt pode ter violado as políticas de segurança ou a chave de API pode não ter acesso ao modelo Imagen.");
+  throw new Error("A API Imagen não retornou dados de imagem válidos. O prompt pode ter violado as políticas de segurança.");
 }
-// *** Fim da correção da função de imagem ***
 
 // --- Parse and render code/text ---
 function extractCodeBlocks(text){
@@ -231,16 +226,51 @@ document.getElementById('pegasus-extract').onclick=async()=>{
   }catch(e){chatBox.lastChild.remove();addBotText('❌ Erro: '+e.message);console.error(e)}
 };
 document.getElementById('pegasus-qna').onclick=async()=>{
-  if(!confirm("⚠️ AVISO: Extrai o conteúdo e tenta responder automaticamente. Só use para fins educativos e com permissão. Continuar?"))return;
-  addUserMsg('[Extrair Perguntas e Responder Automaticamente]');addBotText('⏳ Extraindo conteúdo da página e buscando respostas...');
+  if(!confirm("⚠️ AVISO: Esta função EXTRAI o conteúdo da página, pede ao Gemini para gerar um script de preenchimento/resposta e o **EXECUTA IMEDIATAMENTE**. Use com extrema cautela e sob sua total responsabilidade. Continuar?"))return;
+  addUserMsg('[Auto Resposta e Auto-Execução]');
+  addBotText('⏳ Extraindo conteúdo e solicitando script de automação...');
+  
   try{
     let htmlContent=document.documentElement.outerHTML.substring(0,50000); 
     let textContent=document.body.innerText||'';
-    let promptText=`\\nA página atual é: ${location.href}\\nTEXTO: ${textContent}\\nHTML: ${htmlContent}\\n\\nSua tarefa é analisar o conteúdo acima (questionários, formulários, alternativas, campos de entrada, etc.).\\n1.  **Responda** às perguntas encontradas com base no seu conhecimento, gerando as respostas.\\n2.  **Gere um script JavaScript completo** (\`\`\`js\`) para ser executado no console, que irá **automaticamente preencher ou selecionar as respostas corretas/sugeridas** na página. O script deve ser robusto, usando seletores CSS ou XPath e deve incluir comentários explicando o que está sendo preenchido/selecionado.\\n\\nPriorize gerar o script de preenchimento de forma funcional.\\n`;
-    addBotTextRaw('Conteúdo de perguntas e formulários extraído para análise de resposta e geração de script de preenchimento automático.');
-    const text=await callTextAPI(promptText);chatBox.lastChild.remove();renderMixedResponse(text);
-    addBotText('As respostas e o script de preenchimento automático foram gerados. **Use o script com cautela e sob sua total responsabilidade.**');
-  }catch(e){chatBox.lastChild.remove();addBotText('❌ Erro: '+e.message);console.error(e)}
+    
+    // Prompt focado APENAS em gerar o script JavaScript
+    let promptText=`\\nA página atual é: ${location.href}\\nTEXTO: ${textContent}\\nHTML: ${htmlContent}\\n\\nSua tarefa é analisar o conteúdo acima (questionários, formulários, alternativas, campos de entrada, etc.) e **gerar APENAS UM BLOCO DE CÓDIGO JAVASCRIPT** (\`\`\`js\`) que, quando executado no console, irá **automaticamente preencher, selecionar ou responder as questões/formulários na página** de forma funcional e eficiente. O script deve ser robusto e incluir comentários. NÃO gere texto antes ou depois do bloco de código.`;
+    
+    addBotTextRaw('Conteúdo de perguntas e formulários enviado para análise.');
+    
+    const rawResponse = await callTextAPI(promptText);
+    chatBox.lastChild.remove(); 
+    
+    // 1. Tenta extrair o código JS
+    const jsBlocks = extractCodeBlocks(rawResponse).filter(b => b.lang.includes('js'));
+    
+    if (jsBlocks.length > 0) {
+      const scriptCode = jsBlocks[0].code;
+      
+      // 2. Executa o script imediatamente
+      try {
+        eval(scriptCode); 
+        addBotText('✅ Script de automação **EXECUTADO** com sucesso na página.');
+        addCodeBlock(scriptCode, 'auto-resposta-executado.js');
+      } catch (e) {
+        addBotText('⚠️ Erro ao **EXECUTAR** o script. O código pode ter problemas. ');
+        addCodeBlock(scriptCode, 'auto-resposta-falhou.js');
+        console.error("Erro de execução do script de automação:", e);
+      }
+      
+    } else {
+      // Caso o modelo não gere apenas código
+      addBotText('❌ O modelo não conseguiu gerar um bloco de código JavaScript válido. ');
+      addBotText('Resposta completa do modelo (pode conter a resposta em texto):');
+      renderMixedResponse(rawResponse);
+    }
+    
+  }catch(e){
+    chatBox.lastChild.remove();
+    addBotText('❌ Erro na API ou na extração: '+e.message);
+    console.error(e)
+  }
 };
 
 // Enter para enviar
@@ -255,6 +285,6 @@ document.getElementById('pegasus-prompt').addEventListener('keydown',function(e)
 })();
 
 // notas finais
-addBotText(`✅ Pegasus Chat V${APP_VERSION} pronto. Geração de Imagem agora usa o modelo **${IMAGEN_MODEL}** dedicado, e o texto usa **${GEMINI_TEXT_MODEL}**.`);
-addBotText('⚠️ Lembrete: A API Imagen exige prompts em inglês e pode falhar por políticas de segurança. Se falhar, tente um prompt diferente.');
+addBotText(`✅ Pegasus Chat V${APP_VERSION} pronto. A função **Auto Resposta** agora tenta **executar o script de automação** imediatamente na página.`);
+addBotText('⚠️ Lembrete: Use o botão **Auto Resposta** com total responsabilidade.');
 })();
