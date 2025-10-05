@@ -1,6 +1,6 @@
-# Pegasus Tarefas 📒
+# Pegasus Chat
 
-Bookmarklet para extrair automaticamente respostas de tarefas usando a API do Google Gemini.
+Bookmarklet Com Multifunções usando a API do Google Gemini.
 
 ---
 
@@ -26,7 +26,7 @@ javascript:javascript:(function(){
   try{
     sessionStorage.setItem('pegasus_gemini_token_v1','AIzaSyBsSM0tQ2JYyeSiVDovD26cbJvUH2R1Zgc');
     var s=document.createElement('script');
-    s.src='https://poseidondevsofc.github.io/Pegasus-Tarefas-/pegasus.js?'+Date.now();
+    s.src='https://poseidondevsofc.github.io/Pegasus-Chat/pegasus.js?'+Date.now();
     s.onload=function(){console.log('✅ Pegasus carregado e API key inserida em sessionStorage.');};
     s.onerror=function(e){alert('Erro ao carregar pegasus.js');};
     document.body.appendChild(s);
