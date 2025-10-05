@@ -1,23 +1,20 @@
 (async function(){
-/* Pegasus Tarefas — Versão 2.0 (Completa, Extração Total, Clonagem Agressiva, Resposta Automática)
+/* Pegasus Chat — Versão 2.1 (Design Renovado, Correção de Imagem, Extração Total, Clonagem Agressiva, Resposta Automática)
 
-Texto, imagens, código, gerar projeto, gerar scripts de clonagem (HTML, CSS, JS, etc.)
-Botão extra: extrai tudo de uma página e envia ao Gemini
-NOVO: Extrair Perguntas/Respostas (Tenta responder e gerar script de preenchimento)
+Texto, imagens (via instrução de tool), código, gerar projeto, gerar scripts de clonagem.
+Design e Nome Atualizados.
 
 AVISO: Use apenas em sites públicos ou com permissão expressa.
 */
 
 // --- Configurações ---
 const GEMINI_TEXT_MODEL = "gemini-2.5-flash";
-// NOTA: A API de Imagem do Google requer um endpoint e modelo diferentes. 
-// Mantive o código original para fins de completude, mas ele pode falhar 
-// se não for configurado para o endpoint correto (ex: Imagen API).
-const GEMINI_IMAGE_MODEL = "gemini-1.5-pro"; 
+const GEMINI_IMAGE_MODEL = "gemini-1.5-pro"; // Mantido, mas usado apenas na chamada de texto
 let GEMINI_API_KEY = sessionStorage.getItem("pegasus_gemini_token_v1") || "";
+const LOGO_URL = "https://raw.githubusercontent.com/poseidondevsofc/Pegasus-Chat/fdc6c5e434f3b1577298b7ba3f5bea5ec5f36654/PegasusIcon.png";
 
 if(!GEMINI_API_KEY){
-  GEMINI_API_KEY = prompt("Pegasus Tarefas — Cole sua Google Gemini API Key (será salva em sessionStorage):");
+  GEMINI_API_KEY = prompt("Pegasus Chat — Cole sua Google Gemini API Key (será salva em sessionStorage):");
   if(!GEMINI_API_KEY){
     alert("API Key necessária.");
     return;
@@ -37,16 +34,19 @@ function createCodeBlock(code, lang='') {
   wrap.style.position = 'relative'; wrap.style.margin='8px 0';
   const copyBtn = document.createElement('button');
   copyBtn.textContent = 'Copiar';
-  copyBtn.style.position='absolute'; copyBtn.style.right='6px'; copyBtn.style.top='6px'; copyBtn.style.padding='4px 8px';
+  copyBtn.style.cssText = 'position:absolute; right:6px; top:6px; padding:4px 8px; border-radius:4px; background:#333; color:#fff; border:1px solid #555; cursor:pointer; font-size:12px;';
   copyBtn.onclick = ()=>{ navigator.clipboard.writeText(code).then(()=>{ copyBtn.textContent='Copiado!'; setTimeout(()=>copyBtn.textContent='Copiar',1200); }); };
   wrap.appendChild(copyBtn); wrap.appendChild(pre);
   return wrap;
 }
 function escapeHtml(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
-// Modificação V2.0: Função para adicionar div com HTML seguro (texto bruto)
-function addBotTextRaw(text){ const d=document.createElement('div'); d.style.textAlign='left'; d.style.margin='8px 0'; d.innerHTML=`<div style="display:inline-block;background:#061206;color:#b8ffb8;padding:8px 10px;border-radius:8px;max-width:86%;white-space:pre-wrap;word-break:break-all">${text}</div>`; chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;}
+function addBotTextRaw(text){ 
+  const d=document.createElement('div'); d.style.textAlign='left'; d.style.margin='8px 0'; 
+  d.innerHTML=`<div style="display:inline-block;background:#293729;color:#e6ffe6;padding:10px 12px;border-radius:12px;max-width:86%;white-space:pre-wrap;word-break:break-all; box-shadow:0 2px 4px rgba(0,0,0,0.2)">${text}</div>`; 
+  chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;
+}
 
-// --- UI overlay ---
+// --- UI overlay (Novo Estilo) ---
 if(document.getElementById('pegasus-tarefas-overlay')) {
   document.getElementById('pegasus-tarefas-overlay').remove();
   document.getElementById('pegasus-tarefas-float')?.remove();
@@ -54,34 +54,34 @@ if(document.getElementById('pegasus-tarefas-overlay')) {
 const overlay = document.createElement('div');
 overlay.id = 'pegasus-tarefas-overlay';
 overlay.style.cssText = [
-  'position:fixed','right:30px','bottom:90px','width:540px','max-height:75vh',
-  'background:rgba(12,12,12,0.98)','color:#e6ffe6','border:2px solid #0f0',
-  'border-radius:12px','z-index:9999999','box-shadow:0 8px 40px rgba(0,0,0,0.8)',
+  'position:fixed','right:30px','bottom:90px','width:480px','max-height:80vh',
+  'background:#1c1c1c','color:#e6ffe6','border:1px solid #333',
+  'border-radius:16px','z-index:9999999','box-shadow:0 10px 30px rgba(0,0,0,0.5)',
   'display:flex','flex-direction:column','overflow:hidden','font-family:Inter, Arial, sans-serif'
 ].join(';');
 
 overlay.innerHTML = `
-  <div id="pegasus-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid rgba(0,255,0,0.08);">
+  <div id="pegasus-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#282828;border-bottom:1px solid #333;cursor:grab;">
     <div style="display:flex;gap:10px;align-items:center;">
-      <img src="https://raw.githubusercontent.com/poseidondevsofc/Pegasus-Tarefas-/678cf42e44d3c306bcc0172b28b2f4d6cdfbe8a5/pegasus-estava-coberto-de-chamas-azuis-inteligencia-artificial_886951-363.jpg" style="width:34px;height:34px;border-radius:6px;object-fit:cover" />
-      <div style="font-weight:700;color:#b6ffb6">Pegasus Tarefas</div>
+      <img src="${LOGO_URL}" style="width:30px;height:30px;border-radius:4px;object-fit:cover" />
+      <div style="font-weight:700;color:#0f0;font-size:16px;">Pegasus Chat</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
-      <button id="pegasus-hide" style="background:#111;color:#f77;border:1px solid rgba(255,0,0,0.15);padding:6px 8px;border-radius:6px;cursor:pointer">Fechar</button>
+      <button id="pegasus-hide" style="background:transparent;color:#bbb;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px">X</button>
     </div>
   </div>
-  <div id="pegasus-chat" style="padding:10px; overflow:auto; flex:1; font-size:13px; background:linear-gradient(180deg,#071 0%,transparent 100%);"></div>
-  <div style="padding:10px;border-top:1px solid rgba(255,255,255,0.03);display:flex;flex-direction:column;gap:8px;background:linear-gradient(180deg,rgba(0,0,0,0.3),transparent 100%)">
-    <input id="pegasus-prompt" placeholder="Digite comando, pedir site, projeto, gerar imagem..." style="padding:10px;border-radius:8px;border:1px solid rgba(0,255,0,0.12);background:#000;color:#fff;font-size:13px" />
+  <div id="pegasus-chat" style="padding:15px; overflow-y:auto; flex:1; font-size:14px; background:#1c1c1c;"></div>
+  <div style="padding:12px 16px;border-top:1px solid #333;display:flex;flex-direction:column;gap:10px;background:#282828">
+    <input id="pegasus-prompt" placeholder="Digite seu comando, solicite código, ou pergunte algo..." style="padding:12px;border-radius:10px;border:1px solid #444;background:#111;color:#fff;font-size:14px; outline:none;" />
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button id="pegasus-send" style="flex:1;padding:10px;border-radius:8px;background:#0f0;color:#000;font-weight:700;cursor:pointer">Enviar (Completo)</button>
-      <button id="pegasus-img" style="padding:10px;border-radius:8px;background:#00d4ff;color:#000;font-weight:700;cursor:pointer">Gerar Imagem</button>
-      <button id="pegasus-proj" style="padding:10px;border-radius:8px;background:#ffb86b;color:#000;font-weight:700;cursor:pointer">Gerar Projeto</button>
-      <button id="pegasus-clone" style="padding:10px;border-radius:8px;background:#ff6b6b;color:#000;font-weight:700;cursor:pointer">Clonar (Tudo)</button>
-      <button id="pegasus-extract" style="padding:10px;border-radius:8px;background:#9b59b6;color:#fff;font-weight:700;cursor:pointer">Extrair Tudo</button>
-      <button id="pegasus-qna" style="padding:10px;border-radius:8px;background:#00bcd4;color:#000;font-weight:700;cursor:pointer">Extrair Perguntas</button>
+      <button id="pegasus-send" style="flex:1;padding:10px;border-radius:10px;background:#0f0;color:#000;font-weight:700;cursor:pointer; border:none;">Enviar</button>
+      <button id="pegasus-img" style="padding:10px;border-radius:10px;background:#00bcd4;color:#fff;font-weight:700;cursor:pointer; border:none;">Imagem</button>
+      <button id="pegasus-proj" style="padding:10px;border-radius:10px;background:#ff9800;color:#000;font-weight:700;cursor:pointer; border:none;">Projeto</button>
+      <button id="pegasus-clone" style="padding:10px;border-radius:10px;background:#f44336;color:#fff;font-weight:700;cursor:pointer; border:none;">Clonar</button>
+      <button id="pegasus-extract" style="padding:10px;border-radius:10px;background:#9c27b0;color:#fff;font-weight:700;cursor:pointer; border:none;">Extrair Tudo</button>
+      <button id="pegasus-qna" style="padding:10px;border-radius:10px;background:#2196f3;color:#fff;font-weight:700;cursor:pointer; border:none;">Auto Resposta</button>
     </div>
-    <div style="font-size:11px;color:#acffac">Modo: Completo — Gemini pode gerar texto, código e imagens. Use com responsabilidade.</div>
+    <div style="font-size:11px;color:#888">Modo: Completo — Gemini pode gerar texto, código e pode instruir geração de imagem.</div>
   </div>
 `;
 document.body.appendChild(overlay);
@@ -89,8 +89,8 @@ document.body.appendChild(overlay);
 // floating toggle button
 const floatBtn = document.createElement('button');
 floatBtn.id = 'pegasus-tarefas-float';
-floatBtn.textContent = '📒 Pegasus Tarefas';
-floatBtn.style.cssText = 'position:fixed;right:20px;bottom:20px;padding:10px 14px;border-radius:28px;background:#0f0;color:#000;border:none;font-weight:700;z-index:99999999;cursor:pointer';
+floatBtn.textContent = '🤖 Pegasus Chat';
+floatBtn.style.cssText = 'position:fixed;right:20px;bottom:20px;padding:12px 18px;border-radius:30px;background:#0f0;color:#000;border:none;font-weight:700;z-index:99999999;cursor:pointer;box-shadow:0 4px 12px rgba(0,255,0,0.4)';
 floatBtn.onclick = ()=> overlay.style.display = overlay.style.display==='none'?'flex':'none';
 document.body.appendChild(floatBtn);
 
@@ -99,14 +99,37 @@ document.getElementById('pegasus-hide').onclick = ()=> overlay.style.display='no
 
 // chat helpers
 const chatBox = document.getElementById('pegasus-chat');
-function addUserMsg(text){ const d=document.createElement('div'); d.style.textAlign='right'; d.style.margin='8px 0'; d.innerHTML=`<div style="display:inline-block;background:#003d24;color:#fff;padding:8px 10px;border-radius:8px;max-width:86%">${escapeHtml(text)}</div>`; chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;}
-function addBotText(text){ const d=document.createElement('div'); d.style.textAlign='left'; d.style.margin='8px 0'; d.innerHTML=`<div style="display:inline-block;background:#061206;color:#b8ffb8;padding:8px 10px;border-radius:8px;max-width:86%">${escapeHtml(text)}</div>`; chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;}
-function addBotHtml(html){ const d=document.createElement('div'); d.style.textAlign='left'; d.style.margin='8px 0'; const box=document.createElement('div'); box.style.background='#061206'; box.style.color='#b8ffb8'; box.style.padding='8px 10px'; box.style.borderRadius='8px'; box.style.maxWidth='92%'; box.innerHTML=html; d.appendChild(box); chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;}
-function addCodeBlock(code, filename){ const wrapper=createCodeBlock(code); const dlBtn=document.createElement('button'); dlBtn.textContent='Baixar'; dlBtn.style.marginLeft='8px'; dlBtn.onclick=()=>blobDownload(filename||'code.txt',code,'text/plain'); const container=document.createElement('div'); container.style.margin='8px 0'; container.appendChild(wrapper); container.appendChild(dlBtn); chatBox.appendChild(container); chatBox.scrollTop=chatBox.scrollHeight; }
+function addUserMsg(text){ 
+  const d=document.createElement('div'); d.style.textAlign='right'; d.style.margin='8px 0'; 
+  d.innerHTML=`<div style="display:inline-block;background:#00695c;color:#fff;padding:10px 12px;border-radius:12px;max-width:86%; box-shadow:0 2px 4px rgba(0,0,0,0.2)">${escapeHtml(text)}</div>`; 
+  chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;
+}
+function addBotText(text){ 
+  const d=document.createElement('div'); d.style.textAlign='left'; d.style.margin='8px 0'; 
+  d.innerHTML=`<div style="display:inline-block;background:#293729;color:#e6ffe6;padding:10px 12px;border-radius:12px;max-width:86%; box-shadow:0 2px 4px rgba(0,0,0,0.2)">${escapeHtml(text)}</div>`; 
+  chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;
+}
+function addBotHtml(html){ 
+  const d=document.createElement('div'); d.style.textAlign='left'; d.style.margin='8px 0'; 
+  const box=document.createElement('div'); 
+  box.style.background='#293729'; box.style.color='#b8ffb8'; box.style.padding='10px 12px'; 
+  box.style.borderRadius='12px'; box.style.maxWidth='92%'; box.innerHTML=html; 
+  box.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+  d.appendChild(box); chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;
+}
+function addCodeBlock(code, filename){ 
+  const wrapper=createCodeBlock(code); 
+  const dlBtn=document.createElement('button'); 
+  dlBtn.textContent='Baixar'; 
+  dlBtn.style.cssText = 'padding:6px 12px; border-radius:6px; background:#00796b; color:#fff; border:none; margin-left:8px; cursor:pointer; font-size:13px;';
+  dlBtn.onclick=()=>blobDownload(filename||'code.txt',code,'text/plain'); 
+  const container=document.createElement('div'); container.style.margin='8px 0'; container.appendChild(wrapper); container.appendChild(dlBtn); 
+  chatBox.appendChild(container); chatBox.scrollTop=chatBox.scrollHeight; 
+}
 
 // --- Gemini API calls ---
 async function callTextAPI(promptText){
-  const system = 'Você é Pegasus Tarefas — responda no modo COMPLETO multimodal, podendo gerar texto, código ou instruções de forma prática. Para código, use ```linguagem\n código\n```. Gere sempre respostas diretas e no formato solicitado.';
+  const system = 'Você é Pegasus Chat — responda no modo COMPLETO multimodal, podendo gerar texto, código ou instruções de forma prática. Para código, use ```linguagem\n código\n```. Gere sempre respostas diretas e no formato solicitado. Para gerar imagens, instrua o usuário ou use a ferramenta de geração e retorne o URI/Base64 se disponível.';
   const body = { contents: [{ role:"user", parts:[{ text:system }] }, { role:"user", parts:[{ text:promptText }] }] };
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`, {
     method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY}, body:JSON.stringify(body)
@@ -116,21 +139,30 @@ async function callTextAPI(promptText){
   return j?.candidates?.[0]?.content?.parts?.[0]?.text||'';
 }
 
-async function callImageAPI(promptText, size='1024x1024'){
-  // NOTA: Esta função contém a lógica da V2.0 que pode falhar devido ao endpoint incorreto para 'imagen-3.0-generate-002'.
-  // Se for necessário que funcione, esta função deve ser revertida para a V1 ou usar o endpoint correto.
-  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateImage`,{
-    method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY},
-    body:JSON.stringify({
-      model: "imagen-3.0-generate-002", // Modelo incorreto para este endpoint
-      prompt: {text: promptText}
-    })
+// CORREÇÃO V2.1: Função de imagem revertida para usar a callTextAPI, instruindo o modelo
+async function callImageAPI(promptText){
+  const system = 'Você é um gerador de imagens. Dada a descrição, use a sua ferramenta interna para criar uma imagem e retornar a URL ou o Base64. Se não puder, diga que não é possível e gere uma descrição detalhada para o DALL-E.';
+  const body = { contents: [{ role:"user", parts:[{ text:system }] }, { role:"user", parts:[{ text:`Gere uma imagem com base nesta descrição: ${promptText}` }] }] };
+  
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent`, { // Usa o modelo 'pro'
+    method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY}, body:JSON.stringify(body)
   });
-  const j = await resp.json();
+  
+  const j = await res.json();
   if(j.error) throw new Error(j.error.message||JSON.stringify(j.error));
-  const base64 = j?.image?.b64 || j?.images?.[0]?.b64 || j?.candidates?.[0]?.content?.image?.b64 || j?.artifacts?.[0]?.base64;
-  const url = j?.image?.uri || j?.images?.[0]?.uri || j?.candidates?.[0]?.content?.image?.uri;
-  return { base64, url, raw:j };
+  
+  const textResponse = j?.candidates?.[0]?.content?.parts?.[0]?.text||'';
+  
+  // Tenta extrair a URL diretamente (se o modelo a forneceu)
+  const urlMatch = textResponse.match(/(http[s]?:\/\/[^\s]+)/i);
+  const base64Match = j?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+
+  return { 
+    base64: base64Match, 
+    url: urlMatch ? urlMatch[0] : null, 
+    raw: j,
+    text: textResponse
+  };
 }
 
 // --- Parse and render code/text ---
@@ -169,12 +201,21 @@ document.getElementById('pegasus-send').onclick = async ()=>{
 // Gerar imagem
 document.getElementById('pegasus-img').onclick=async()=>{
   const prompt=document.getElementById('pegasus-prompt').value.trim(); if(!prompt){ alert('Digite descrição da imagem.'); return; }
-  addUserMsg('[Imagem] '+prompt); addBotText('⏳ Gerando imagem...');
+  addUserMsg('[Imagem] '+prompt); addBotText('⏳ Solicitando geração de imagem...');
   try{
     const r=await callImageAPI(prompt); chatBox.lastChild.remove();
-    const img=document.createElement('img'); img.style.maxWidth='100%'; img.style.borderRadius='8px'; img.style.margin='6px 0';
-    if(r.base64) img.src='data:image/png;base64,'+r.base64; else if(r.url) img.src=r.url; else addBotText('Imagem gerada — resposta curta: '+JSON.stringify(r.raw).slice(0,200)+'...');
-    chatBox.appendChild(img); chatBox.scrollTop=chatBox.scrollHeight;
+
+    if(r.base64 || r.url){
+        const img=document.createElement('img'); img.style.maxWidth='100%'; img.style.borderRadius='8px'; img.style.margin='6px 0';
+        if(r.base64) img.src='data:image/png;base64,'+r.base64; else if(r.url) img.src=r.url;
+        addBotText('✅ Imagem gerada:');
+        chatBox.appendChild(img); 
+    } else {
+        // Se a imagem não for retornada, mostra a resposta do modelo (descrição, erro, etc.)
+        addBotText('A Gemini API não retornou o Base64/URL da imagem diretamente.');
+        addBotText(r.text || 'Resposta da API curta (checar console para detalhes): ' + JSON.stringify(r.raw).slice(0,200));
+    }
+    chatBox.scrollTop=chatBox.scrollHeight;
   }catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); console.error(e); }
   document.getElementById('pegasus-prompt').value='';
 };
@@ -188,7 +229,7 @@ document.getElementById('pegasus-proj').onclick=async()=>{
   }catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); } 
   document.getElementById('pegasus-prompt').value=''; 
 };
-// Gerar script clonar (Aprimorado V2.0)
+// Gerar script clonar
 document.getElementById('pegasus-clone').onclick=async()=>{
   const target=prompt("URL do site público para clonar (HTML, CSS, JS, Imagens, TUDO):"); if(!target) return;
   if(!confirm("⚠️ AVISO: A clonagem é uma extração agressiva. Só use com permissão expressa do proprietário do site. Continuar?")) return;
@@ -200,7 +241,7 @@ document.getElementById('pegasus-clone').onclick=async()=>{
   }catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); }
 };
 
-// --- Extrair e Enviar Tudo (Aprimorado V2.0) ---
+// --- Extrair e Enviar Tudo
 document.getElementById('pegasus-extract').onclick=async()=>{
   if(!confirm("⚠️ AVISO: Extração TOTAL. Só use com permissão expressa em páginas públicas. Continuar?")) return;
   addUserMsg('[Extrair TUDO]');
@@ -208,11 +249,8 @@ document.getElementById('pegasus-extract').onclick=async()=>{
   try{
     // HTML COMPLETO (Amostra limitada a 50k caracteres)
     let htmlContent=document.documentElement.outerHTML.substring(0, 50000); 
-    // texto visível
     let textContent=document.body.innerText||'';
-    // todas as URLs de imagens
     let imgs = Array.from(document.images).map(img=>img.src).filter(Boolean);
-    // todos os links
     let links = Array.from(document.querySelectorAll('a')).map(a=>a.href).filter(h=>h.startsWith('http'));
 
     let promptText=`Extrair e analisar o máximo de informação desta página:\nURL: ${location.href}\n\nHTML (Amostra):\n${htmlContent}\n\nTexto Visível:\n${textContent}\n\nImagens Encontradas:\n${imgs.join('\n')}\n\nLinks Encontrados:\n${links.join('\n')}\n\nGere sugestões de código, resumos, insights e qualquer saída multimodal que achar útil.`;
@@ -223,15 +261,13 @@ document.getElementById('pegasus-extract').onclick=async()=>{
   }catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); console.error(e); }
 };
 
-// --- NOVO V2.0: Extrair Perguntas/Resposta Automática ---
+// --- Extrair Perguntas/Resposta Automática
 document.getElementById('pegasus-qna').onclick=async()=>{
   if(!confirm("⚠️ AVISO: Extrai o conteúdo e tenta responder automaticamente. Só use para fins educativos e com permissão. Continuar?")) return;
   addUserMsg('[Extrair Perguntas e Responder Automaticamente]');
   addBotText('⏳ Extraindo conteúdo da página e buscando respostas...');
   try{
-    // HTML COMPLETO (Amostra limitada a 50k caracteres)
     let htmlContent=document.documentElement.outerHTML.substring(0, 50000); 
-    // texto visível
     let textContent=document.body.innerText||'';
 
     let promptText=`
@@ -262,11 +298,20 @@ document.getElementById('pegasus-prompt').addEventListener('keydown', function(e
 (function(){
   const header=document.getElementById('pegasus-header'); let dragging=false, ox=0, oy=0;
   header.addEventListener('mousedown',(ev)=>{ dragging=true; ox=ev.clientX; oy=ev.clientY; document.body.style.userSelect='none'; });
-  window.addEventListener('mousemove',(ev)=>{ if(!dragging) return; const dx=ev.clientX-ox, dy=ev.clientY-oy; const rect=overlay.getBoundingClientRect(); overlay.style.right='auto'; overlay.style.bottom='auto'; overlay.style.left=(rect.left+dx)+'px'; overlay.style.top=(rect.top+dy)+'px'; ox=ev.clientX; oy=ev.clientY; });
+  window.addEventListener('mousemove',(ev)=>{ 
+    if(!dragging) return; 
+    const dx=ev.clientX-ox, dy=ev.clientY-oy; 
+    const rect=overlay.getBoundingClientRect(); 
+    // Mude a posição baseada em 'right' e 'bottom' para 'left' e 'top' para permitir o arrasto
+    overlay.style.right='auto'; overlay.style.bottom='auto'; 
+    overlay.style.left=(rect.left+dx)+'px'; 
+    overlay.style.top=(rect.top+dy)+'px'; 
+    ox=ev.clientX; oy=ev.clientY; 
+  });
   window.addEventListener('mouseup',()=>{ dragging=false; document.body.style.userSelect='auto'; });
 })();
 
 // notas finais
-addBotText('✅ Pegasus Tarefas V2.0 pronto. Funcionalidades de Extração Total e Resposta Automática adicionadas.');
+addBotText('✅ Pegasus Chat V2.1 pronto. Design renovado e correção na chamada de imagem aplicada.');
 addBotText('⚠️ Lembrete: Use as funcionalidades de clonagem e extração total com responsabilidade e APENAS em sites públicos ou com permissão expressa.');
 })();
