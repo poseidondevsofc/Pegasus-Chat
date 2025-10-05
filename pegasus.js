@@ -2,7 +2,7 @@ javascript:(async function(){
 /* Pegasus Chat — Versão 2.6 (QNA: Auto Execução Imediata do Script) */
 
 // --- Configurações ---
-const APP_VERSION = "2.6"; // Versão reduzida
+const APP_VERSION = "1.0"; // Versão reduzida
 const CURRENT_TIME = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}); // Hora atual
 const GEMINI_TEXT_MODEL = "gemini-2.5-flash"; // Modelo texto estável
 const IMAGEN_MODEL = "imagen-4.0-generate-001"; // Modelo dedicado à geração de imagens
