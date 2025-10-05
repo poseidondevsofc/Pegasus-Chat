@@ -1,11 +1,12 @@
-(async function(){
-/* Pegasus Chat — Versão 2.3 (Correção de Modelo para gemini-2.5-flash, Design Aprimorado) */
+javascript:(async function(){
+/* Pegasus Chat — Versão 2.4 (Correção Final de Modelo: gemini-2.5-flash e Imagem com IMAGEN) */
 
 // --- Configurações ---
-const APP_VERSION = "2.3"; // Versão reduzida
-const CURRENT_TIME = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}); // Hora atual
-const GEMINI_TEXT_MODEL = "gemini-2.5-flash"; // Modelo mais moderno e compatível
-const GEMINI_VISION_MODEL = "gemini-2.5-flash"; // Usa o mesmo modelo multimodal para a função Imagem
+const APP_VERSION = "1.0"; // Versão reduzida
+const CURRENT_TIME = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}); // Hora atual (6:52 PM -03, 05/10/2025)
+const GEMINI_TEXT_MODEL = "gemini-2.5-flash"; // Modelo texto estável
+const IMAGEN_MODEL = "imagen-4.0-generate-001"; // Modelo dedicado à geração de imagens
+const IMAGEN_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${IMAGEN_MODEL}:predict`;
 let GEMINI_API_KEY = sessionStorage.getItem("pegasus_gemini_token_v1") || "";
 const LOGO_URL = "https://raw.githubusercontent.com/poseidondevsofc/Pegasus-Chat/fdc6c5e434f3b1577298b7ba3f5bea5ec5f36654/PegasusIcon.png";
 
@@ -59,7 +60,7 @@ overlay.innerHTML = `
       <button id="pegasus-extract" style="padding:10px;border-radius:10px;background:#9c27b0;color:#fff;font-weight:700;cursor:pointer; border:none;">Extrair Tudo</button>
       <button id="pegasus-qna" style="padding:10px;border-radius:10px;background:#2196f3;color:#fff;font-weight:700;cursor:pointer; border:none;">Auto Resposta</button>
     </div>
-    <div style="font-size:11px;color:#888">Modelo atual: **${GEMINI_TEXT_MODEL}**. Use o botão Imagem para instruções visuais.</div>
+    <div style="font-size:11px;color:#888">Modelo de Texto: **${GEMINI_TEXT_MODEL}** | Modelo de Imagem: **${IMAGEN_MODEL}**</div>
   </div>
 `;
 document.body.appendChild(overlay);
@@ -102,7 +103,7 @@ async function callTextAPI(promptText){
   const system = 'Você é Pegasus Chat — responda no modo COMPLETO multimodal, podendo gerar texto, código ou instruções de forma prática. Para código, use ```linguagem\n código\n```. Gere sempre respostas diretas e no formato solicitado.';
   const body = { contents: [{ role:"user", parts:[{ text:system }] }, { role:"user", parts:[{ text:promptText }] }] };
   
-  // Usa o modelo gemini-2.5-flash (texto)
+  // Usa o modelo gemini-2.5-flash
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`, {
     method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY}, body:JSON.stringify(body)
   });
@@ -111,31 +112,49 @@ async function callTextAPI(promptText){
   return j?.candidates?.[0]?.content?.parts?.[0]?.text||'';
 }
 
-// Função de imagem usa o mesmo modelo flash, que é multimodal.
+// *** Função de imagem corrigida para a API IMAGEN ***
 async function callImageAPI(promptText){
-  const system = 'Você é um assistente visual. Dada a descrição, use a ferramenta de geração de imagem (DALL-E, Imagen) se tiver acesso e retorne a URL ou Base64. Se não tiver, gere uma descrição detalhada para a ferramenta DALL-E.';
-  const body = { contents: [{ role:"user", parts:[{ text:system }] }, { role:"user", parts:[{ text:`Gere uma imagem com base nesta descrição: ${promptText}. Se gerar, retorne APENAS o URI/Base64.` }] }] };
+  // Note: Imagen só aceita prompts em Inglês. Para melhorar, o prompt do usuário 
+  // pode precisar ser traduzido antes de ser enviado. Por enquanto, enviamos direto.
+  const body = {
+    instances: [
+      {
+        prompt: promptText
+      }
+    ],
+    parameters: {
+      sampleCount: 1 // Gera 1 imagem
+      // Outros parâmetros podem ser adicionados aqui: aspectRatio: "16:9", imageSize: "1K"
+    }
+  };
   
-  // Usa o modelo gemini-2.5-flash (multimodal)
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_VISION_MODEL}:generateContent`, {
-    method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY}, body:JSON.stringify(body)
+  const res = await fetch(IMAGEN_ENDPOINT, {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'x-goog-api-key':GEMINI_API_KEY
+    },
+    body:JSON.stringify(body)
   });
   
   const j = await res.json();
   if(j.error) throw new Error(j.error.message||JSON.stringify(j.error));
   
-  const textResponse = j?.candidates?.[0]?.content?.parts?.[0]?.text||'';
-  
-  // Tenta extrair a URL
-  const urlMatch = textResponse.match(/(http[s]?:\/\/[^\s]+)/i);
-  
-  return { 
-    base64: null,
-    url: urlMatch ? urlMatch[0] : null, 
-    raw: j,
-    text: textResponse
-  };
+  // A resposta do Imagen retorna Base64 em generatedImages[0].image.imageBytes
+  const generatedImage = j?.generatedImages?.[0];
+
+  if (generatedImage && generatedImage.image && generatedImage.image.imageBytes) {
+      return { 
+          base64: generatedImage.image.imageBytes,
+          url: null,
+          raw: j,
+          text: ""
+      };
+  }
+
+  throw new Error("A API Imagen não retornou dados de imagem válidos. O prompt pode ter violado as políticas de segurança ou a chave de API pode não ter acesso ao modelo Imagen.");
 }
+// *** Fim da correção da função de imagem ***
 
 // --- Parse and render code/text ---
 function extractCodeBlocks(text){
@@ -167,16 +186,15 @@ document.getElementById('pegasus-send').onclick=async()=>{
 };
 document.getElementById('pegasus-img').onclick=async()=>{
   const prompt=document.getElementById('pegasus-prompt').value.trim();if(!prompt){alert('Digite descrição da imagem.');return}
-  addUserMsg('[Imagem] '+prompt);addBotText('⏳ Solicitando geração de imagem...');
+  addUserMsg('[Imagem] '+prompt);addBotText('⏳ Solicitando geração de imagem com Imagen...');
   try{
     const r=await callImageAPI(prompt);chatBox.lastChild.remove();
-    if(r.base64||r.url){
+    if(r.base64){
         const img=document.createElement('img');img.style.maxWidth='100%';img.style.borderRadius='8px';img.style.margin='6px 0';
-        if(r.base64)img.src='data:image/png;base64,'+r.base64;else if(r.url)img.src=r.url;
+        img.src='data:image/png;base64,'+r.base64;
         addBotText('✅ Imagem gerada:');chatBox.appendChild(img); 
     }else{
-        addBotText('A API não retornou o Base64/URL diretamente. Resposta do modelo:');
-        addBotText(r.text||'Resposta da API curta (checar console para detalhes): '+JSON.stringify(r.raw).slice(0,200));
+        addBotText('Resposta Inesperada da API Imagen. Checar console para detalhes.');
     }
     chatBox.scrollTop=chatBox.scrollHeight;
   }catch(e){chatBox.lastChild.remove();addBotText('❌ Erro: '+e.message);console.error(e)}
@@ -237,6 +255,6 @@ document.getElementById('pegasus-prompt').addEventListener('keydown',function(e)
 })();
 
 // notas finais
-addBotText(`✅ Pegasus Chat V${APP_VERSION} pronto. Modelo principal alterado para **${GEMINI_TEXT_MODEL}** para resolver o erro de incompatibilidade.`);
-addBotText('⚠️ Lembrete: A funcionalidade de Imagem usa o mesmo modelo multimodal e conta com a API para instruir a geração visual e retornar a URL. Pode não funcionar como uma API de imagem dedicada.');
+addBotText(`✅ Pegasus Chat V${APP_VERSION} pronto. Geração de Imagem agora usa o modelo **${IMAGEN_MODEL}** dedicado, e o texto usa **${GEMINI_TEXT_MODEL}**.`);
+addBotText('⚠️ Lembrete: A API Imagen exige prompts em inglês e pode falhar por políticas de segurança. Se falhar, tente um prompt diferente.');
 })();
