@@ -1,11 +1,11 @@
 (async function(){
-/* Pegasus Chat — Versão 2.2 (Correção de Modelo p/ gemini-pro, Design Aprimorado) */
+/* Pegasus Chat — Versão 2.3 (Correção de Modelo para gemini-2.5-flash, Design Aprimorado) */
 
 // --- Configurações ---
-const APP_VERSION = "1.0"; // Versão reduzida
+const APP_VERSION = "2.3"; // Versão reduzida
 const CURRENT_TIME = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}); // Hora atual
-const GEMINI_TEXT_MODEL = "gemini-pro"; // Modelo mais compatível para texto geral
-const GEMINI_VISION_MODEL = "gemini-pro-vision"; // Usado para instruir geração/análise de imagem
+const GEMINI_TEXT_MODEL = "gemini-2.5-flash"; // Modelo mais moderno e compatível
+const GEMINI_VISION_MODEL = "gemini-2.5-flash"; // Usa o mesmo modelo multimodal para a função Imagem
 let GEMINI_API_KEY = sessionStorage.getItem("pegasus_gemini_token_v1") || "";
 const LOGO_URL = "https://raw.githubusercontent.com/poseidondevsofc/Pegasus-Chat/fdc6c5e434f3b1577298b7ba3f5bea5ec5f36654/PegasusIcon.png";
 
@@ -101,7 +101,8 @@ function addCodeBlock(code, filename){
 async function callTextAPI(promptText){
   const system = 'Você é Pegasus Chat — responda no modo COMPLETO multimodal, podendo gerar texto, código ou instruções de forma prática. Para código, use ```linguagem\n código\n```. Gere sempre respostas diretas e no formato solicitado.';
   const body = { contents: [{ role:"user", parts:[{ text:system }] }, { role:"user", parts:[{ text:promptText }] }] };
-  // Usa o modelo gemini-pro (texto)
+  
+  // Usa o modelo gemini-2.5-flash (texto)
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`, {
     method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY}, body:JSON.stringify(body)
   });
@@ -110,12 +111,12 @@ async function callTextAPI(promptText){
   return j?.candidates?.[0]?.content?.parts?.[0]?.text||'';
 }
 
-// Função de imagem agora usa gemini-pro-vision para instruções multimodais
+// Função de imagem usa o mesmo modelo flash, que é multimodal.
 async function callImageAPI(promptText){
   const system = 'Você é um assistente visual. Dada a descrição, use a ferramenta de geração de imagem (DALL-E, Imagen) se tiver acesso e retorne a URL ou Base64. Se não tiver, gere uma descrição detalhada para a ferramenta DALL-E.';
   const body = { contents: [{ role:"user", parts:[{ text:system }] }, { role:"user", parts:[{ text:`Gere uma imagem com base nesta descrição: ${promptText}. Se gerar, retorne APENAS o URI/Base64.` }] }] };
   
-  // Usa o modelo gemini-pro-vision (multimodal)
+  // Usa o modelo gemini-2.5-flash (multimodal)
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_VISION_MODEL}:generateContent`, {
     method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY}, body:JSON.stringify(body)
   });
@@ -129,7 +130,7 @@ async function callImageAPI(promptText){
   const urlMatch = textResponse.match(/(http[s]?:\/\/[^\s]+)/i);
   
   return { 
-    base64: null, // O gemini-pro-vision raramente retorna Base64 em texto, mas sim URLs.
+    base64: null,
     url: urlMatch ? urlMatch[0] : null, 
     raw: j,
     text: textResponse
@@ -236,6 +237,6 @@ document.getElementById('pegasus-prompt').addEventListener('keydown',function(e)
 })();
 
 // notas finais
-addBotText(`✅ Pegasus Chat V${APP_VERSION} pronto. Modelo principal alterado para **${GEMINI_TEXT_MODEL}** para maior compatibilidade.`);
-addBotText('⚠️ Lembrete: A funcionalidade de Imagem agora usa o modelo visual e a chamada de texto, contando que a Gemini API possa instruir a geração e retornar a URL. Pode não funcionar como uma API de imagem dedicada.');
+addBotText(`✅ Pegasus Chat V${APP_VERSION} pronto. Modelo principal alterado para **${GEMINI_TEXT_MODEL}** para resolver o erro de incompatibilidade.`);
+addBotText('⚠️ Lembrete: A funcionalidade de Imagem usa o mesmo modelo multimodal e conta com a API para instruir a geração visual e retornar a URL. Pode não funcionar como uma API de imagem dedicada.');
 })();
