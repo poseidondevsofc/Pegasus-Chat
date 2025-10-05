@@ -1,8 +1,8 @@
 javascript:(async function(){
-/* Pegasus Chat — Versão 2.6 (QNA: Auto Execução Imediata do Script) */
+/* Pegasus Chat — Versão 1.0 (QNA: Resposta em Arquivo TXT, sem execução) */
 
 // --- Configurações ---
-const APP_VERSION = "2.6"; // Versão reduzida
+const APP_VERSION = "1.0"; // Versão reduzida
 const CURRENT_TIME = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}); // Hora atual
 const GEMINI_TEXT_MODEL = "gemini-2.5-flash"; // Modelo texto estável
 const IMAGEN_MODEL = "imagen-4.0-generate-001"; // Modelo dedicado à geração de imagens
@@ -226,44 +226,39 @@ document.getElementById('pegasus-extract').onclick=async()=>{
   }catch(e){chatBox.lastChild.remove();addBotText('❌ Erro: '+e.message);console.error(e)}
 };
 document.getElementById('pegasus-qna').onclick=async()=>{
-  if(!confirm("⚠️ AVISO: Esta função EXTRAI o conteúdo da página, pede ao Gemini para gerar um script de preenchimento/resposta e o **EXECUTA IMEDIATAMENTE**. Use com extrema cautela e sob sua total responsabilidade. Continuar?"))return;
-  addUserMsg('[Auto Resposta e Auto-Execução]');
-  addBotText('⏳ Extraindo conteúdo e solicitando script de automação...');
+  if(!confirm("⚠️ AVISO: Esta função EXTRAI o conteúdo da página para que o Gemini responda às perguntas encontradas. Use com cautela. Continuar?"))return;
+  addUserMsg('[Auto Resposta - Respostas e Resumo]');
+  addBotText('⏳ Extraindo conteúdo da página e buscando respostas...');
   
   try{
     let htmlContent=document.documentElement.outerHTML.substring(0,50000); 
     let textContent=document.body.innerText||'';
     
-    // Prompt focado APENAS em gerar o script JavaScript
-    let promptText=`\\nA página atual é: ${location.href}\\nTEXTO: ${textContent}\\nHTML: ${htmlContent}\\n\\nSua tarefa é analisar o conteúdo acima (questionários, formulários, alternativas, campos de entrada, etc.) e **gerar APENAS UM BLOCO DE CÓDIGO JAVASCRIPT** (\`\`\`js\`) que, quando executado no console, irá **automaticamente preencher, selecionar ou responder as questões/formulários na página** de forma funcional e eficiente. O script deve ser robusto e incluir comentários. NÃO gere texto antes ou depois do bloco de código.`;
+    // Prompt focado APENAS em texto de resposta, sem código
+    let promptText=`\\nA página atual é: ${location.href}\\nTEXTO:\\n${textContent}\\nHTML (Amostra):\\n${htmlContent}\\n\\nSua tarefa é analisar o conteúdo acima (incluindo perguntas, formulários, alternativas) e fornecer a melhor resposta ou resumo do conteúdo em formato de texto. Priorize a resposta a quaisquer perguntas ou a solução de exercícios que encontrar. Não gere nenhum código.`;
     
     addBotTextRaw('Conteúdo de perguntas e formulários enviado para análise.');
     
-    const rawResponse = await callTextAPI(promptText);
+    const responseText = await callTextAPI(promptText);
     chatBox.lastChild.remove(); 
     
-    // 1. Tenta extrair o código JS
-    const jsBlocks = extractCodeBlocks(rawResponse).filter(b => b.lang.includes('js'));
-    
-    if (jsBlocks.length > 0) {
-      const scriptCode = jsBlocks[0].code;
-      
-      // 2. Executa o script imediatamente
-      try {
-        eval(scriptCode); 
-        addBotText('✅ Script de automação **EXECUTADO** com sucesso na página.');
-        addCodeBlock(scriptCode, 'auto-resposta-executado.js');
-      } catch (e) {
-        addBotText('⚠️ Erro ao **EXECUTAR** o script. O código pode ter problemas. ');
-        addCodeBlock(scriptCode, 'auto-resposta-falhou.js');
-        console.error("Erro de execução do script de automação:", e);
-      }
-      
+    if (responseText) {
+      // Exibe a resposta
+      addBotText('✅ Análise concluída. Resposta/Resumo:');
+      renderMixedResponse(responseText);
+
+      // Gera o arquivo TXT para download
+      const filename = 'pegasus-resposta-qna.txt';
+      const dlBtnWrapper = document.createElement('div');
+      const dlBtn = document.createElement('button'); 
+      dlBtn.textContent = `📥 Baixar Resposta Completa (${filename})`;
+      dlBtn.style.cssText = 'padding:10px 15px; border-radius:8px; background:#2196f3; color:#fff; border:none; margin:10px 0; cursor:pointer; font-weight:700;';
+      dlBtn.onclick = () => blobDownload(filename, responseText, 'text/plain'); 
+      dlBtnWrapper.appendChild(dlBtn);
+      chatBox.appendChild(dlBtnWrapper);
+
     } else {
-      // Caso o modelo não gere apenas código
-      addBotText('❌ O modelo não conseguiu gerar um bloco de código JavaScript válido. ');
-      addBotText('Resposta completa do modelo (pode conter a resposta em texto):');
-      renderMixedResponse(rawResponse);
+      addBotText('❌ O modelo não retornou uma resposta válida. Tente um prompt mais específico.');
     }
     
   }catch(e){
@@ -285,6 +280,6 @@ document.getElementById('pegasus-prompt').addEventListener('keydown',function(e)
 })();
 
 // notas finais
-addBotText(`✅ Pegasus Chat V${APP_VERSION} pronto. A função **Auto Resposta** agora tenta **executar o script de automação** imediatamente na página.`);
-addBotText('⚠️ Lembrete: Use o botão **Auto Resposta** com total responsabilidade.');
+addBotText(`✅ Pegasus Chat V${APP_VERSION}`);
+addBotText('⚠️ Lembrete: Use o botão **Auto Resposta** com cautela.');
 })();
