@@ -1,7 +1,6 @@
 javascript:(async function(){
-/* Pegasus Chat — Versão 1.1 — Atualizado: relógio em tempo real, "notebook" com truque de invisibilidade, clone gera HTML completo, extract pergunta ao usuário, projeto pergunta preferências */
+/* Pegasus Chat — Versão 1.1 — Atualizado: relógio em tempo real, notebook invisível/visível, clone gera HTML completo, extract pergunta ao usuário, projeto pergunta preferências */
 
-// --- Configurações ---
 const APP_VERSION = "1.1";
 let GEMINI_API_KEY = sessionStorage.getItem("pegasus_gemini_token_v1") || "";
 const LOGO_URL = "https://raw.githubusercontent.com/poseidondevsofc/Pegasus-Chat/fdc6c5e434f3b1577298b7ba3f5bea5ec5f36654/PegasusIcon.png";
@@ -9,7 +8,6 @@ const GEMINI_TEXT_MODEL = "gemini-2.5-flash";
 const IMAGEN_MODEL = "imagen-4.0-generate-001";
 const IMAGEN_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${IMAGEN_MODEL}:predict`;
 
-// pede API key se não existir
 if(!GEMINI_API_KEY){
   GEMINI_API_KEY = prompt("Pegasus Chat — Cole sua Google Gemini API Key (será salva em sessionStorage):");
   if(!GEMINI_API_KEY){ alert("API Key necessária."); return; }
@@ -23,7 +21,8 @@ function escapeHtml(s){return (s||'').toString().replace(/&/g,'&amp;').replace(/
 function addBotTextRaw(text){const d=document.createElement('div');d.style.textAlign='left';d.style.margin='8px 0';d.innerHTML=`<div style="display:inline-block;background:#293729;color:#e6ffe6;padding:10px 12px;border-radius:12px;max-width:86%;white-space:pre-wrap;word-break:break-all; box-shadow:0 2px 4px rgba(0,0,0,0.2)">${text}</div>`;chatBox.appendChild(d);chatBox.scrollTop=chatBox.scrollHeight}
 
 // remove overlays antigos
-if(document.getElementById('pegasus-tarefas-overlay')) { document.getElementById('pegasus-tarefas-overlay').remove(); document.getElementById('pegasus-tarefas-float')?.remove(); }
+document.getElementById('pegasus-tarefas-overlay')?.remove();
+document.getElementById('pegasus-tarefas-float')?.remove();
 
 // --- UI overlay ---
 const overlay = document.createElement('div');
@@ -64,7 +63,6 @@ overlay.innerHTML = `
     </div>
   </div>
 `;
-
 document.body.appendChild(overlay);
 
 // floating toggle button
@@ -92,7 +90,7 @@ function updateClock(){
   if(el) el.textContent = `V${APP_VERSION} (${hh}:${mm})`;
 }
 updateClock();
-setInterval(updateClock, 30*1000); // atualiza a cada 30s para pegar mudança de minuto
+setInterval(updateClock, 30*1000); // atualiza a cada 30s
 
 // --- Notebook com truque de invisibilidade/visível ---
 const notebookBtn = document.getElementById('pegasus-notebook-toggle');
@@ -120,9 +118,9 @@ notebookBtn.addEventListener('click', ()=>{
 // atalho teclado para alternar notebook (Ctrl+Shift+N)
 window.addEventListener('keydown',(e)=>{ if(e.ctrlKey && e.shiftKey && e.key.toLowerCase()==='n'){ if(!document.getElementById('pegasus-notebook')) notebookBtn.click(); else document.getElementById('pegasus-notebook').style.display = document.getElementById('pegasus-notebook').style.display === 'none' ? 'flex' : 'none'; }});
 
-// --- Gemini API calls (mesmas funções) ---
+// --- Gemini API calls ---
 async function callTextAPI(promptText){
-  const system = 'Você é Pegasus Chat — responda no modo COMPLETO multimodal, podendo gerar texto, código ou instruções de forma prática. Para código, use ```linguagem\n código\n```. Gere sempre respostas diretas e no formato solicitado.';
+  const system = 'Você é Pegasus Chat — responda no modo COMPLETO multimodal, podendo gerar texto, código ou instruções de forma prática. Para código, use ```linguagem\\n código\\n```. Gere sempre respostas diretas e no formato solicitado.';
   const body = { contents: [{ role:"user", parts:[{ text:system }] }, { role:"user", parts:[{ text:promptText }] }] };
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`, {
     method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY}, body:JSON.stringify(body)
@@ -164,9 +162,12 @@ document.getElementById('pegasus-img').onclick=async()=>{
 // projeto: agora pergunta como o usuário quer
 document.getElementById('pegasus-proj').onclick=async()=>{
   const userPref = prompt('Como você quer o projeto? (ex: single-page, landing, blog, com TypeScript, responsivo, etc.)');
-  const prompt = (userPref && userPref.trim().length) ? `Crie um projeto conforme: ${userPref}` : 'Crie um site simples com index.html, style.css, script.js.';
+  const prompt = (userPref && userPref.trim().length) ? "Crie um projeto conforme: " + userPref : 'Crie um site simples com index.html, style.css, script.js.';
   addUserMsg('[Gerar Projeto] '+prompt); addBotText('⏳ Gerando projeto...');
-  try{ const text = await callTextAPI(`Por favor gere arquivos separados em blocos ```html```, ```css``` e ```js``` conforme pedido: ${prompt}`); chatBox.lastChild.remove(); renderMixedResponse(text); addBotText('Arquivos acima — use “Copiar” ou “Baixar”.'); }
+  try{
+    const text = await callTextAPI("Por favor gere arquivos separados em blocos ```html```, ```css``` e ```js``` conforme pedido: " + prompt);
+    chatBox.lastChild.remove(); renderMixedResponse(text); addBotText('Arquivos acima — use “Copiar” ou “Baixar”.');
+  }
   catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message) }
   document.getElementById('pegasus-prompt').value=''
 };
@@ -177,17 +178,45 @@ document.getElementById('pegasus-clone').onclick=async()=>{
   if(!confirm('⚠️ AVISO: A clonagem copia conteúdo. Só opere com permissão do proprietário. Continuar?')) return;
   addUserMsg('[Clonar Site - HTML completo] '+target); addBotText('⏳ Gerando arquivos HTML/CSS/JS que tentam baixar e inline recursos (melhor esforço)...');
   try{
-    // Geramos três blocos: index.html, inline-assets.js, style.css — o index inclui um script que tenta "incluir" recursos via fetch e transformar em data:urls
-    const indexHtml = `<!doctype html>\n<html lang=\"pt-BR\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>Clone de ${target}</title>\n<link rel=\"stylesheet\" href=\"style.css\">\n</head>\n<body>\n<h1>Clone gerado (melhor esforço)</h1>\n<div id=\"content\">Carregando conteúdo do site...</div>\n<script src=\"inline-assets.js\"></script>\n</body>\n</html>`;
+    const indexHtml = '<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<title>Clone de ' + target + '</title>\n<link rel="stylesheet" href="style.css">\n</head>\n<body>\n<h1>Clone gerado (melhor esforço)</h1>\n<div id="content">Carregando conteúdo do site...</div>\n<script src="inline-assets.js"></script>\n</body>\n</html>';
 
-    const inlineJs = `// inline-assets.js — tenta buscar a página e substituir links por data:urls (sujeito a CORS).\n(async function(){\n  const target='${target}';\n  try{\n    const res = await fetch(target);\n    const text = await res.text();\n    // insere HTML bruto na div (útil quando CORS permite)\n    document.getElementById('content').innerText = '';\n    const frag = document.createRange().createContextualFragment(text);\n    document.getElementById('content').appendChild(frag);\n    // tentativa de inlining de imagens: converte imagens com fetch para data URLs\n    const imgs = Array.from(document.getElementById('content').querySelectorAll('img')).map(i=>i.src);
-    for(const src of imgs){ try{ const r=await fetch(src); const b=await r.blob(); const reader=new FileReader(); reader.onloadend = ()=>{ const el = document.querySelector(`#content img[src=\\"${src.replace(/\"/g,'\\\\\"')}\\"]`); if(el) el.src = reader.result; }; reader.readAsDataURL(b); }catch(e){ console.warn('não conseguiu inlining',src,e) }}
-  }catch(e){ document.getElementById('content').innerText = 'Erro ao buscar o site — provável bloqueio CORS. Veja instruções no arquivo README.'; console.error(e) }
+    const inlineJs = `// inline-assets.js — tenta buscar a página e substituir links por data:urls (sujeito a CORS).
+(async function(){
+  const target='${target}';
+  try{
+    const res = await fetch(target);
+    const text = await res.text();
+    document.getElementById('content').innerText = '';
+    const frag = document.createRange().createContextualFragment(text);
+    document.getElementById('content').appendChild(frag);
+    const imgs = Array.from(document.getElementById('content').querySelectorAll('img')).map(i=>i.src);
+    for(const src of imgs){
+      try{
+        const r=await fetch(src);
+        const b=await r.blob();
+        const reader=new FileReader();
+        reader.onloadend = (function(origSrc){
+          return function(){
+            const el = document.querySelector('#content img[src=\"' + origSrc.replace(/\"/g,'\\\"') + '\"]');
+            if(el) el.src = this.result;
+          };
+        })(src);
+        reader.readAsDataURL(b);
+      }catch(e){ console.warn('não conseguiu inlining',src,e) }
+    }
+  }catch(e){
+    document.getElementById('content').innerText = 'Erro ao buscar o site — provável bloqueio CORS. Veja instruções no arquivo README.';
+    console.error(e)
+  }
 })();`;
 
-    const styleCss = `/* style.css — base para o clone */\nbody{font-family:Arial, sans-serif;background:#fff;color:#111;padding:20px}\n#content{border:1px solid #ddd;padding:12px;border-radius:8px}\nimg{max-width:100%;height:auto}`;
+    const styleCss = "/* style.css — base para o clone */\nbody{font-family:Arial, sans-serif;background:#fff;color:#111;padding:20px}\n#content{border:1px solid #ddd;padding:12px;border-radius:8px}\nimg{max-width:100%;height:auto}";
 
-    chatBox.lastChild.remove(); addCodeBlock(indexHtml,'index.html'); addCodeBlock(styleCss,'style.css'); addCodeBlock(inlineJs,'inline-assets.js'); addBotText('✅ Arquivos gerados. Se quiser, clique em "Baixar" para cada arquivo. Observação: o inlining depende de CORS; para clonagem completa use ferramentas server-side ou permissões apropriadas.');
+    chatBox.lastChild.remove();
+    addCodeBlock(indexHtml,'index.html');
+    addCodeBlock(styleCss,'style.css');
+    addCodeBlock(inlineJs,'inline-assets.js');
+    addBotText('✅ Arquivos gerados. Se quiser, clique em "Baixar" para cada arquivo. Observação: o inlining depende de CORS; para clonagem completa use ferramentas server-side ou permissões apropriadas.');
   }catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro: '+e.message); console.error(e) }
 };
 
@@ -200,20 +229,17 @@ document.getElementById('pegasus-extract').onclick=async()=>{
   try{
     const origin = location.origin;
     const collected = { url: location.href, images:[], links:[], text: document.body.innerText || '', meta: {} };
-    // meta
     (document.querySelectorAll('meta')).forEach(m=>{ if(m.name) collected.meta[m.name]=m.content; if(m.property) collected.meta[m.property]=m.content; });
 
-    // simple collectors from current page
     collected.images = Array.from(document.images).map(i=>i.src).filter(Boolean);
     collected.links = Array.from(document.querySelectorAll('a')).map(a=>a.href).filter(h=>h.startsWith('http'));
 
-    // if user asked for site or tudo, tente seguir links do mesmo domínio (limite para evitar loop)
     if(/site|tudo/i.test(userWant)){
       addBotText('⏳ Tentando varrer links do mesmo domínio (limite 20). Pode sofrer bloqueio por CORS.');
       const sameOriginLinks = collected.links.filter(l=>{ try{ return new URL(l).origin===origin }catch(e){return false} }).slice(0,20);
       for(const l of sameOriginLinks){
         try{
-          const r = await fetch(l); // pode falhar por CORS
+          const r = await fetch(l);
           const html = await r.text();
           const tmp = document.createElement('div'); tmp.innerHTML = html;
           const imgs = Array.from(tmp.querySelectorAll('img')).map(i=>i.src).filter(Boolean);
@@ -225,7 +251,6 @@ document.getElementById('pegasus-extract').onclick=async()=>{
       }
     }
 
-    // filtrar e deduplicar
     collected.images = Array.from(new Set(collected.images)).slice(0,200);
     collected.links = Array.from(new Set(collected.links)).slice(0,500);
 
@@ -235,7 +260,6 @@ document.getElementById('pegasus-extract').onclick=async()=>{
     addBotText(`Links encontrados: ${collected.links.length}`);
     addBotText(`Trecho do texto (primeiros 2000 caracteres):\n${collected.text.slice(0,2000)}`);
 
-    // botões para baixar/listar
     const wrap = document.createElement('div'); wrap.style.margin='8px 0';
     const dl1 = document.createElement('button'); dl1.textContent='📥 Baixar JSON (extracao.json)'; dl1.style.cssText='padding:8px;border-radius:8px;background:#2196f3;color:#fff;border:none;cursor:pointer;margin-right:8px'; dl1.onclick=()=>blobDownload('extracao.json',JSON.stringify(collected,null,2),'application/json');
     const dl2 = document.createElement('button'); dl2.textContent='🔗 Listar imagens'; dl2.style.cssText='padding:8px;border-radius:8px;background:#00796b;color:#fff;border:none;cursor:pointer'; dl2.onclick=()=>{ const list = collected.images.join('\n'); blobDownload('imagens.txt',list,'text/plain'); };
@@ -243,17 +267,27 @@ document.getElementById('pegasus-extract').onclick=async()=>{
   }catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro na extração: '+e.message); console.error(e) }
 };
 
-// auto resposta (qna) mantém comportamento, mas informa que faz perguntas e salva TXT
+// auto resposta (qna)
 document.getElementById('pegasus-qna').onclick=async()=>{
   if(!confirm('⚠️ AVISO: Esta função EXTRAI o conteúdo da página para que o Gemini responda às perguntas encontradas. Use com cautela. Continuar?')) return;
   addUserMsg('[Auto Resposta - Respostas e Resumo]'); addBotText('⏳ Extraindo conteúdo da página e buscando respostas...');
   try{
     let htmlContent=document.documentElement.outerHTML.substring(0,50000);
     let textContent=document.body.innerText||'';
-    let promptText=`\nA página atual é: ${location.href}\nTEXTO:\n${textContent}\nHTML (Amostra):\n${htmlContent}\n\nSua tarefa é analisar o conteúdo acima (incluindo perguntas, formulários, alternativas) e fornecer a melhor resposta ou resumo do conteúdo em formato de texto. Priorize a resposta a quaisquer perguntas ou a solução de exercícios que encontrar. Não gere nenhum código.`;
+    let promptText = "\nA página atual é: " + location.href + "\nTEXTO:\n" + textContent + "\nHTML (Amostra):\n" + htmlContent + "\n\nSua tarefa é analisar o conteúdo acima (incluindo perguntas, formulários, alternativas) e fornecer a melhor resposta ou resumo do conteúdo em formato de texto. Priorize a resposta a quaisquer perguntas ou a solução de exercícios que encontrar. Não gere nenhum código.";
     addBotTextRaw('Conteúdo de perguntas e formulários enviado para análise.');
     const responseText = await callTextAPI(promptText);
-    chatBox.lastChild.remove(); if(responseText){ addBotText('✅ Análise concluída. Resposta/Resumo:'); renderMixedResponse(responseText); const filename = 'pegasus-resposta-qna.txt'; const dlBtnWrapper = document.createElement('div'); const dlBtn = document.createElement('button'); dlBtn.textContent = `📥 Baixar Resposta Completa (${filename})`; dlBtn.style.cssText = 'padding:10px 15px; border-radius:8px; background:#2196f3; color:#fff; border:none; margin:10px 0; cursor:pointer; font-weight:700;'; dlBtn.onclick = () => blobDownload(filename, responseText, 'text/plain'); dlBtnWrapper.appendChild(dlBtn); chatBox.appendChild(dlBtnWrapper); } else { addBotText('❌ O modelo não retornou uma resposta válida. Tente um prompt mais específico.') }
+    chatBox.lastChild.remove();
+    if(responseText){
+      addBotText('✅ Análise concluída. Resposta/Resumo:'); renderMixedResponse(responseText);
+      const filename = 'pegasus-resposta-qna.txt';
+      const dlBtnWrapper = document.createElement('div');
+      const dlBtn = document.createElement('button');
+      dlBtn.textContent = `📥 Baixar Resposta Completa (${filename})`;
+      dlBtn.style.cssText = 'padding:10px 15px; border-radius:8px; background:#2196f3; color:#fff; border:none; margin:10px 0; cursor:pointer; font-weight:700;';
+      dlBtn.onclick = () => blobDownload(filename, responseText, 'text/plain');
+      dlBtnWrapper.appendChild(dlBtn); chatBox.appendChild(dlBtnWrapper);
+    } else { addBotText('❌ O modelo não retornou uma resposta válida. Tente um prompt mais específico.') }
   }catch(e){ chatBox.lastChild.remove(); addBotText('❌ Erro na API ou na extração: '+e.message); console.error(e) }
 };
 
